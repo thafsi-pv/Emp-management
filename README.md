@@ -1,6 +1,6 @@
-# QTS ERP - Employee Management System
+# Employee Management System
 
-Single repository / monorepo setup for QTS ERP with React Frontend, NestJS Backend, and PostgreSQL database.
+Single repository / monorepo setup for Employee Management System with React Frontend, NestJS Backend, and PostgreSQL database.
 
 ## Monorepo Architecture
 
@@ -54,8 +54,8 @@ Edit `.env` using Notepad or your text editor and set your secure passwords and 
 ```env
 POSTGRES_USER=postgres
 POSTGRES_PASSWORD=your_secure_password_here
-POSTGRES_DB=qts_erp
-DATABASE_URL=postgresql://postgres:your_secure_password_here@postgres:5432/qts_erp?schema=public
+POSTGRES_DB=emp_management
+DATABASE_URL=postgresql://postgres:your_secure_password_here@postgres:5432/emp_management?schema=public
 JWT_ACCESS_SECRET=your_long_random_jwt_access_secret
 JWT_REFRESH_SECRET=your_long_random_jwt_refresh_secret
 ```
