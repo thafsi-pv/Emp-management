@@ -1,0 +1,388 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")   // Supabase pooled (pgbouncer) — used at runtime
+  directUrl = env("DIRECT_URL")     // Supabase direct — used by prisma migrate / prisma db push
+}
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  EMPLOYEE
+  ESTABLISHMENT_OFFICER
+  PAYROLL_OFFICER
+  DEPARTMENT_OFFICER
+  MANAGEMENT
+}
+
+enum Gender {
+  MALE
+  FEMALE
+}
+
+enum Shift {
+  GENERAL
+  MORNING
+  EVENING
+  NIGHT
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  INACTIVE
+  LEAVE
+  OFF
+  SERVICE_BREAK
+  EXPIRED
+  RESIGNED
+  TERMINATED
+}
+
+enum ContractType {
+  THREE_MONTHS
+  SIX_MONTHS
+  ONE_YEAR
+  CUSTOM
+}
+
+enum AppointmentStatus {
+  ACTIVE
+  EXPIRED
+  TERMINATED
+  RENEWED
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LEAVE
+  OFF
+  OD
+  HOLIDAY
+  SERVICE_BREAK
+}
+
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum PayrollStatus {
+  DRAFT
+  APPROVED
+  PAID
+}
+
+enum PayType {
+  DAILY
+  MONTHLY
+}
+
+enum LeaveType {
+  CASUAL
+  SICK
+  FESTIVAL
+  UNPAID
+  OTHER
+}
+
+model User {
+  id           String    @id @default(uuid())
+  name         String
+  email        String    @unique
+  password     String
+  role         UserRole  @default(EMPLOYEE)
+  employeeId   String?   @unique
+  employee     Employee? @relation(fields: [employeeId], references: [id])
+  refreshToken String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@map("users")
+}
+
+model Department {
+  id           String        @id @default(uuid())
+  name         String        @unique
+  code         String        @unique
+  sections     Section[]
+  employees    Employee[]
+  appointments Appointment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  @@map("departments")
+}
+
+model Section {
+  id           String     @id @default(uuid())
+  name         String
+  code         String     @unique
+  departmentId String
+  department   Department @relation(fields: [departmentId], references: [id])
+  employees    Employee[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@map("sections")
+}
+
+model Designation {
+  id            String        @id @default(uuid())
+  name          String        @unique
+  code          String        @unique
+  payType       PayType       @default(MONTHLY)
+  basicPay      Float         @default(0)
+  weightage     Float         @default(0)
+  allowance     Float         @default(0)
+  otRate        Float         @default(0)
+  employees     Employee[]
+  appointments  Appointment[]
+  payStructures PayStructure[]
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@map("designations")
+}
+
+model Employee {
+  id               String               @id @default(uuid())
+  code             String               @unique
+  name             String
+  photo            String?
+  address          String
+  phone            String
+  email            String               @unique
+  gender           Gender
+  dateOfBirth      DateTime
+  idDetails        String?
+  shift            Shift                @default(GENERAL)
+  departmentId     String
+  department       Department           @relation(fields: [departmentId], references: [id])
+  sectionId        String?
+  section          Section?             @relation(fields: [sectionId], references: [id])
+  supervisorId     String?
+  supervisor       Employee?            @relation("SupervisorEmployees", fields: [supervisorId], references: [id])
+  supervisees      Employee[]           @relation("SupervisorEmployees")
+  designationId    String
+  designation      Designation          @relation(fields: [designationId], references: [id])
+  salary           Float
+  joiningDate      DateTime
+  status           EmployeeStatus       @default(ACTIVE)
+  user             User?
+  appointments     Appointment[]
+  attendances      Attendance[]
+  payrolls         Payroll[]
+  serviceBreaks    ServiceBreak[]
+  terminations     ContractTermination[]
+  documents        EmployeeDocument[]
+  payRevisions     PayRevision[]
+  finalSettlement  FinalSettlement?
+  leaves           Leave[]
+  createdAt        DateTime             @default(now())
+  updatedAt        DateTime             @updatedAt
+
+  @@map("employees")
+}
+
+model Appointment {
+  id                 String            @id @default(uuid())
+  orderNumber        String            @unique
+  employeeId         String
+  employee           Employee          @relation(fields: [employeeId], references: [id])
+  contractType       ContractType
+  startDate          DateTime
+  endDate            DateTime
+  salary             Float
+  designationId      String
+  designation        Designation       @relation(fields: [designationId], references: [id])
+  departmentId       String
+  department         Department        @relation(fields: [departmentId], references: [id])
+  termsAndConditions String
+  status             AppointmentStatus @default(ACTIVE)
+  renewals           ContractRenewal[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@map("appointments")
+}
+
+model Attendance {
+  id             String           @id @default(uuid())
+  employeeId     String
+  employee       Employee         @relation(fields: [employeeId], references: [id])
+  date           DateTime         @db.Date
+  status         AttendanceStatus
+  approvalStatus ApprovalStatus   @default(PENDING)
+  approvedById   String?
+  remarks        String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([employeeId, date])
+  @@map("attendance")
+}
+
+model Leave {
+  id             String         @id @default(uuid())
+  employeeId     String
+  employee       Employee       @relation(fields: [employeeId], references: [id])
+  leaveType      LeaveType
+  startDate      DateTime
+  endDate        DateTime
+  reason         String
+  status         ApprovalStatus @default(PENDING)
+  approvedById   String?
+  remarks        String?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@map("leaves")
+}
+
+model Payroll {
+  id               String        @id @default(uuid())
+  employeeId       String
+  employee         Employee      @relation(fields: [employeeId], references: [id])
+  month            String
+  year             Int
+  totalWorkingDays Int
+  workedDays       Float
+  basicSalary      Float
+  allowance        Float         @default(0)
+  bonus            Float         @default(0)
+  gratuity         Float         @default(0)
+  deduction        Float         @default(0)
+  overtime         Float         @default(0)
+  netSalary        Float
+  status           PayrollStatus @default(DRAFT)
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+
+  @@unique([employeeId, month, year])
+  @@map("payroll")
+}
+
+model PayStructure {
+  id            String      @id @default(uuid())
+  designationId String
+  designation   Designation @relation(fields: [designationId], references: [id])
+  payType       PayType
+  basicPay      Float
+  weightage     Float       @default(0)
+  allowance     Float       @default(0)
+  otRate        Float       @default(0)
+  effectiveFrom DateTime
+  isActive      Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  @@map("pay_structures")
+}
+
+model PayRevision {
+  id            String   @id @default(uuid())
+  employeeId    String
+  employee      Employee @relation(fields: [employeeId], references: [id])
+  oldBasicPay   Float
+  newBasicPay   Float
+  effectiveDate DateTime
+  reason        String?
+  orderNumber   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("pay_revisions")
+}
+
+model ServiceBreak {
+  id             String   @id @default(uuid())
+  employeeId     String
+  employee       Employee @relation(fields: [employeeId], references: [id])
+  orderNumber    String?
+  orderDate      DateTime?
+  breakStartDate DateTime
+  breakEndDate   DateTime
+  reason         String
+  remarks        String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@map("service_breaks")
+}
+
+model ContractRenewal {
+  id            String       @id @default(uuid())
+  appointmentId String
+  appointment   Appointment  @relation(fields: [appointmentId], references: [id])
+  newStartDate  DateTime
+  newEndDate    DateTime
+  contractType  ContractType
+  salary        Float
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@map("contract_renewals")
+}
+
+model ContractTermination {
+  id              String   @id @default(uuid())
+  employeeId      String
+  employee        Employee @relation(fields: [employeeId], references: [id])
+  terminationDate DateTime
+  reason          String
+  remarks         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("contract_terminations")
+}
+
+model FinalSettlement {
+  id                 String   @id @default(uuid())
+  employeeId         String   @unique
+  employee           Employee @relation(fields: [employeeId], references: [id])
+  lastWorkingDate    DateTime
+  pendingSalary      Float    @default(0)
+  leaveAdjustments   Float    @default(0)
+  otPay              Float    @default(0)
+  advanceDeductions  Float    @default(0)
+  otherAdjustments   Float    @default(0)
+  netPayable         Float
+  departmentClearance Boolean  @default(false)
+  financeClearance   Boolean  @default(false)
+  hrClearance        Boolean  @default(false)
+  settlementDate     DateTime @default(now())
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@map("final_settlements")
+}
+
+model SystemSetting {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("system_settings")
+}
+
+model EmployeeDocument {
+  id          String   @id @default(uuid())
+  employeeId  String
+  employee    Employee @relation(fields: [employeeId], references: [id])
+  name        String
+  fileType    String
+  fileUrl     String
+  uploadedAt  DateTime @default(now())
+
+  @@map("employee_documents")
+}

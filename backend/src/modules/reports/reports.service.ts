@@ -1,0 +1,173 @@
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+
+@Injectable()
+export class ReportsService {
+  constructor(private prisma: PrismaService) {}
+
+  async getEmployeeReport(params: { departmentId?: string; designationId?: string; status?: string }) {
+    const where: any = {};
+    if (params.departmentId) where.departmentId = params.departmentId;
+    if (params.designationId) where.designationId = params.designationId;
+    if (params.status) where.status = params.status;
+
+    const employees = await this.prisma.employee.findMany({
+      where,
+      include: {
+        department: { select: { name: true } },
+        designation: { select: { name: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const byDepartment = await this.prisma.employee.groupBy({
+      by: ['departmentId'],
+      _count: true,
+    });
+
+    return { employees, totalCount: employees.length, byDepartment };
+  }
+
+  async getAttendanceReport(params: { month?: string; year?: number; employeeId?: string }) {
+    const where: any = {};
+    if (params.employeeId) where.employeeId = params.employeeId;
+    if (params.month && params.year) {
+      where.date = {
+        gte: new Date(params.year, parseInt(params.month) - 1, 1),
+        lte: new Date(params.year, parseInt(params.month), 0),
+      };
+    }
+
+    const records = await this.prisma.attendance.findMany({
+      where,
+      include: {
+        employee: { select: { id: true, name: true, code: true, department: { select: { name: true } } } },
+      },
+      orderBy: [{ date: 'asc' }],
+    });
+
+    const summary = {
+      total: records.length,
+      present: records.filter((r) => r.status === 'PRESENT').length,
+      absent: records.filter((r) => r.status === 'ABSENT').length,
+      halfDay: records.filter((r) => r.status === 'HALF_DAY').length,
+      onLeave: records.filter((r) => r.status === 'LEAVE').length,
+    };
+
+    return { records, summary };
+  }
+
+  async getPayrollReport(params: { month?: string; year?: number; departmentId?: string }) {
+    const where: any = {};
+    if (params.month) where.month = params.month;
+    if (params.year) where.year = params.year;
+
+    const payrolls = await this.prisma.payroll.findMany({
+      where,
+      include: {
+        employee: {
+          select: {
+            id: true, name: true, code: true,
+            department: { select: { id: true, name: true } },
+          },
+        },
+      },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+    });
+
+    const filteredByDept = params.departmentId
+      ? payrolls.filter((p) => p.employee.department?.id === params.departmentId)
+      : payrolls;
+
+    const summary = {
+      totalEmployees: filteredByDept.length,
+      totalNetSalary: filteredByDept.reduce((s, r) => s + r.netSalary, 0),
+      totalBasicSalary: filteredByDept.reduce((s, r) => s + r.basicSalary, 0),
+      totalDeductions: filteredByDept.reduce((s, r) => s + r.deduction, 0),
+      totalBonus: filteredByDept.reduce((s, r) => s + r.bonus, 0),
+    };
+
+    return { payrolls: filteredByDept, summary };
+  }
+
+  async getContractReport(params: { status?: string }) {
+    const where: any = {};
+    if (params.status) where.status = params.status;
+
+    const [appointments, renewals, terminations] = await Promise.all([
+      this.prisma.appointment.findMany({
+        where,
+        include: {
+          employee: { select: { id: true, name: true, code: true } },
+          department: { select: { name: true } },
+          designation: { select: { name: true } },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.contractRenewal.count(),
+      this.prisma.contractTermination.count(),
+    ]);
+
+    const stats = {
+      total: appointments.length,
+      active: appointments.filter((a) => a.status === 'ACTIVE').length,
+      expired: appointments.filter((a) => a.status === 'EXPIRED').length,
+      terminated: appointments.filter((a) => a.status === 'TERMINATED').length,
+      renewed: appointments.filter((a) => a.status === 'RENEWED').length,
+      totalRenewals: renewals,
+      totalTerminations: terminations,
+    };
+
+    return { appointments, stats };
+  }
+
+  async getDashboardStats() {
+    const now = new Date();
+    const thisMonth = now.getMonth() + 1;
+    const thisYear = now.getFullYear();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const in30Days = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000);
+
+    const [
+      totalEmployees, activeEmployees, terminatedEmployees,
+      contractsExpiringSoon, activeContracts,
+      todayAttendance, pendingApprovals,
+      thisMonthPayroll,
+    ] = await Promise.all([
+      this.prisma.employee.count(),
+      this.prisma.employee.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.employee.count({ where: { status: 'TERMINATED' } }),
+      this.prisma.appointment.count({
+        where: { status: 'ACTIVE', endDate: { gte: today, lte: in30Days } },
+      }),
+      this.prisma.appointment.count({ where: { status: 'ACTIVE' } }),
+      this.prisma.attendance.findMany({
+        where: { date: today },
+        select: { status: true, approvalStatus: true },
+      }),
+      this.prisma.attendance.count({ where: { approvalStatus: 'PENDING' } }),
+      this.prisma.payroll.aggregate({
+        where: { month: String(thisMonth).padStart(2, '0'), year: thisYear },
+        _sum: { netSalary: true },
+      }),
+    ]);
+
+    return {
+      totalEmployees,
+      activeEmployees,
+      terminatedEmployees,
+      contractsExpiringSoon,
+      activeContracts,
+      attendanceToday: {
+        total: todayAttendance.length,
+        present: todayAttendance.filter((a) => a.status === 'PRESENT').length,
+        absent: todayAttendance.filter((a) => a.status === 'ABSENT').length,
+        percentage: todayAttendance.length > 0
+          ? Math.round((todayAttendance.filter((a) => a.status === 'PRESENT').length / todayAttendance.length) * 100)
+          : 0,
+      },
+      pendingApprovals,
+      payrollThisMonth: thisMonthPayroll._sum.netSalary ?? 0,
+    };
+  }
+}
