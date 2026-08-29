@@ -45,4 +45,4 @@ RUN mkdir -p uploads/photos uploads/documents
 # Expose internal backend port
 EXPOSE 3000
 
-CMD ["node", "dist/main.js"]
+CMD ["node", "dist/src/main.js"]
