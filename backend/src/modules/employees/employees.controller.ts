@@ -45,7 +45,7 @@ export class EmployeesController {
     return this.service.getServiceHistory(id);
   }
 
-  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR')
   @Post()
   @UseInterceptors(FileInterceptor('photo', { storage: photoStorage }))
   create(@Body() dto: CreateEmployeeDto, @UploadedFile() file?: Express.Multer.File) {
