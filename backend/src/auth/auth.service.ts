@@ -1,7 +1,6 @@
 import {
   Injectable,
   UnauthorizedException,
-  BadRequestException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -18,13 +17,13 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
+    const user = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
     if (!user) throw new UnauthorizedException('Invalid credentials');
 
     const passwordValid = await bcrypt.compare(dto.password, user.password);
     if (!passwordValid) throw new UnauthorizedException('Invalid credentials');
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+    const tokens = await this.generateTokens(user.id, user.phone, user.role);
 
     // Store hashed refresh token
     const hashedRefresh = await bcrypt.hash(tokens.refreshToken, 10);
@@ -36,7 +35,7 @@ export class AuthService {
     return {
       accessToken: tokens.accessToken,
       refreshToken: tokens.refreshToken,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
+      user: { id: user.id, name: user.name, phone: user.phone, email: user.email, role: user.role },
     };
   }
 
@@ -60,7 +59,7 @@ export class AuthService {
       const tokenValid = await bcrypt.compare(dto.refreshToken, user.refreshToken);
       if (!tokenValid) throw new UnauthorizedException();
 
-      const tokens = await this.generateTokens(user.id, user.email, user.role);
+      const tokens = await this.generateTokens(user.id, user.phone, user.role);
       const hashedRefresh = await bcrypt.hash(tokens.refreshToken, 10);
       await this.prisma.user.update({
         where: { id: user.id },
@@ -79,6 +78,7 @@ export class AuthService {
       select: {
         id: true,
         name: true,
+        phone: true,
         email: true,
         role: true,
         employeeId: true,
@@ -89,8 +89,8 @@ export class AuthService {
     return user;
   }
 
-  private async generateTokens(userId: string, email: string, role: string) {
-    const payload = { sub: userId, email, role };
+  private async generateTokens(userId: string, phone: string, role: string) {
+    const payload = { sub: userId, phone, role };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwt.signAsync(payload, {
         secret: this.config.get<string>('JWT_ACCESS_SECRET'),

@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/SimulatedAuthContext';
-import { Lock, Mail, ShieldAlert, Loader2 } from 'lucide-react';
+import { Lock, ShieldAlert, Loader2 } from 'lucide-react';
 import ShootingStars from '../components/animata/background/shooting-stars';
 
 export const Login: React.FC = () => {
   const { login } = useAuth();
-  const [email, setEmail] = useState('admin@hospital.in');
+  const [phone, setPhone] = useState('9999999990'); // Default to admin phone (without +91 in UI input)
   const [password, setPassword] = useState('admin123');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
@@ -14,8 +14,12 @@ export const Login: React.FC = () => {
     e.preventDefault();
     setError(null);
     setSubmitting(true);
+
+    // Prepend India Country Code +91
+    const fullPhone = `+91${phone}`;
+
     try {
-      await login(email, password);
+      await login(fullPhone, password);
     } catch (err: any) {
       setError(err.message || 'Incorrect credentials');
     } finally {
@@ -43,17 +47,21 @@ export const Login: React.FC = () => {
 
         <form onSubmit={handleSubmit} style={styles.form}>
           <div className="form-group">
-            <label className="form-label" htmlFor="email">Email Address</label>
+            <label className="form-label" htmlFor="phone">Mobile Number</label>
             <div style={styles.inputWrapper}>
-              <Mail size={16} style={styles.inputIcon} />
+              <div style={styles.countryCodeBadge}>
+                <span style={{ fontSize: '12px', marginRight: '4px' }}>🇮🇳</span>
+                <span>+91</span>
+              </div>
               <input
-                id="email"
-                type="email"
+                id="phone"
+                type="tel"
+                pattern="[0-9]{10}"
                 className="form-input glass-input"
-                placeholder="e.g. admin@hospital.in"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                style={{ paddingLeft: '40px' }}
+                placeholder="Enter 10-digit mobile number"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                style={{ paddingLeft: '72px' }}
                 required
               />
             </div>
@@ -97,11 +105,11 @@ export const Login: React.FC = () => {
         </form>
 
         <div style={styles.helpText}>
-          <p>Demo Logins:</p>
+          <p>Demo Logins (Enter 10-digit mobile number):</p>
           <div style={styles.demoGrid}>
-            <div>Admin: <strong>admin@hospital.in</strong> / admin123</div>
-            <div>Supervisor: <strong>supervisor@hospital.in</strong> / super123</div>
-            <div>Employee: <strong>ramesh@hospital.in</strong> / emp123</div>
+            <div>Admin: <strong>9999999990</strong> / admin123</div>
+            <div>Supervisor: <strong>9999999994</strong> / super123</div>
+            <div>Employee: <strong>9876543210</strong> / emp123</div>
           </div>
         </div>
         </div>
@@ -184,6 +192,20 @@ const styles: Record<string, React.CSSProperties> = {
     color: 'var(--text-muted)',
     pointerEvents: 'none',
   },
+  countryCodeBadge: {
+    position: 'absolute',
+    left: '12px',
+    display: 'flex',
+    alignItems: 'center',
+    fontFamily: 'var(--font-mono)',
+    fontSize: '13px',
+    fontWeight: '600',
+    color: 'var(--text-secondary)',
+    borderRight: '1px solid var(--border-color)',
+    paddingRight: '8px',
+    pointerEvents: 'none',
+    userSelect: 'none',
+  },
   submitRow: {
     display: 'flex',
     justifyContent: 'center',
@@ -221,3 +243,4 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: '6px',
   },
 };
+export default Login;

@@ -55,29 +55,29 @@ async function main() {
   const empPassword   = await bcrypt.hash('emp123',   10);
 
   await prisma.user.upsert({
-    where: { email: 'admin@hospital.in' },
+    where: { phone: '+919999999990' },
     update: {},
-    create: { name: 'System Admin', email: 'admin@hospital.in', password: adminPassword, role: 'ADMIN' },
+    create: { name: 'System Admin', phone: '+919999999990', email: 'admin@hospital.in', password: adminPassword, role: 'ADMIN' },
   });
   await prisma.user.upsert({
-    where: { email: 'establishment@hospital.in' },
+    where: { phone: '+919999999991' },
     update: {},
-    create: { name: 'Establishment Officer', email: 'establishment@hospital.in', password: adminPassword, role: 'ESTABLISHMENT_OFFICER' },
+    create: { name: 'Establishment Officer', phone: '+919999999991', email: 'establishment@hospital.in', password: adminPassword, role: 'ESTABLISHMENT_OFFICER' },
   });
   await prisma.user.upsert({
-    where: { email: 'payroll@hospital.in' },
+    where: { phone: '+919999999992' },
     update: {},
-    create: { name: 'Payroll Officer', email: 'payroll@hospital.in', password: adminPassword, role: 'PAYROLL_OFFICER' },
+    create: { name: 'Payroll Officer', phone: '+919999999992', email: 'payroll@hospital.in', password: adminPassword, role: 'PAYROLL_OFFICER' },
   });
   await prisma.user.upsert({
-    where: { email: 'management@hospital.in' },
+    where: { phone: '+919999999993' },
     update: {},
-    create: { name: 'Hospital Management', email: 'management@hospital.in', password: adminPassword, role: 'MANAGEMENT' },
+    create: { name: 'Hospital Management', phone: '+919999999993', email: 'management@hospital.in', password: adminPassword, role: 'MANAGEMENT' },
   });
   await prisma.user.upsert({
-    where: { email: 'supervisor@hospital.in' },
+    where: { phone: '+919999999994' },
     update: {},
-    create: { name: 'Dr. Anil Kumar', email: 'supervisor@hospital.in', password: superPassword, role: 'SUPERVISOR' },
+    create: { name: 'Dr. Anil Kumar', phone: '+919999999994', email: 'supervisor@hospital.in', password: superPassword, role: 'SUPERVISOR' },
   });
   console.log('✅ Role-based users seeded');
 
@@ -157,10 +157,11 @@ async function main() {
 
   // Link emp1 user
   await prisma.user.upsert({
-    where: { email: 'ramesh@hospital.in' },
+    where: { phone: emp1.phone },
     update: {},
     create: {
       name: emp1.name,
+      phone: emp1.phone,
       email: emp1.email,
       password: empPassword,
       role: 'EMPLOYEE',

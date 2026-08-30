@@ -6,7 +6,8 @@ export type UserRole = 'ADMIN' | 'SUPERVISOR' | 'EMPLOYEE' | 'ESTABLISHMENT_OFFI
 export interface User {
   id: string;
   name: string;
-  email: string;
+  phone: string;
+  email?: string;
   role: 'ADMIN' | 'SUPERVISOR' | 'EMPLOYEE'; // Actual DB role
   employeeId?: string;
   employee?: {
@@ -20,7 +21,7 @@ interface AuthContextType {
   token: string | null;
   loading: boolean;
   initialLoading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (phone: string, password: string) => Promise<void>;
   logout: () => void;
   switchRole: (role: UserRole) => void;
 }
@@ -55,10 +56,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     fetchMe();
   }, [token]);
 
-  const login = async (email: string, password: string) => {
+  const login = async (phone: string, password: string) => {
     setLoading(true);
     try {
-      const res = await axios.post('/api/auth/login', { email, password });
+      const res = await axios.post('/api/auth/login', { phone, password });
       const { accessToken, user } = res.data;
       
       localStorage.setItem('auth_token', accessToken);

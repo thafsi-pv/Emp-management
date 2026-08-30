@@ -19,7 +19,8 @@ type Role = 'ADMIN' | 'ESTABLISHMENT_OFFICER' | 'PAYROLL_OFFICER' | 'SUPERVISOR'
 interface User {
   id: string;
   name: string;
-  email: string;
+  phone: string;
+  email?: string;
   role: Role;
   employeeId?: string;
   createdAt: string;
@@ -59,6 +60,7 @@ export const UserManagement: React.FC = () => {
 
   // Form fields
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState(''); // Stores 10-digit number without +91 in state
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState<Role>('ESTABLISHMENT_OFFICER');
@@ -84,7 +86,7 @@ export const UserManagement: React.FC = () => {
   });
 
   const resetForm = () => {
-    setName(''); setEmail(''); setPassword(''); setRole('ESTABLISHMENT_OFFICER');
+    setName(''); setPhone(''); setEmail(''); setPassword(''); setRole('ESTABLISHMENT_OFFICER');
     setEmployeeId(''); setNewPassword(''); setFormError(null);
     setShowPassword(false); setShowNewPassword(false);
   };
@@ -92,7 +94,12 @@ export const UserManagement: React.FC = () => {
   const openCreate = () => { resetForm(); setSelected(null); setModal('create'); };
   const openEdit = (u: User) => {
     setSelected(u);
-    setName(u.name); setEmail(u.email); setRole(u.role);
+    setName(u.name);
+    // Strip +91 for UI editing
+    const rawPhone = u.phone.startsWith('+91') ? u.phone.slice(3) : u.phone;
+    setPhone(rawPhone);
+    setEmail(u.email || '');
+    setRole(u.role);
     setEmployeeId(u.employeeId || '');
     setFormError(null); setModal('edit');
   };
@@ -103,8 +110,14 @@ export const UserManagement: React.FC = () => {
 
   const createMutation = useMutation({
     mutationFn: async () => {
+      // Prepend +91 before saving
+      const fullPhone = `+91${phone}`;
       const res = await apiClient.post('/api/users', {
-        name, email, password, role,
+        name,
+        phone: fullPhone,
+        email: email || undefined,
+        password,
+        role,
         ...(employeeId ? { employeeId } : {}),
       });
       return res.data;
@@ -115,8 +128,12 @@ export const UserManagement: React.FC = () => {
 
   const updateMutation = useMutation({
     mutationFn: async () => {
+      const fullPhone = `+91${phone}`;
       const res = await apiClient.patch(`/api/users/${selected!.id}`, {
-        name, email, role,
+        name,
+        phone: fullPhone,
+        email: email || undefined,
+        role,
         ...(employeeId ? { employeeId } : { employeeId: null }),
       });
       return res.data;
@@ -144,13 +161,16 @@ export const UserManagement: React.FC = () => {
   const handleCreateSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setFormError(null);
-    if (!name || !email || !password) { setFormError('Name, email and password are required'); return; }
+    if (!name || !phone || !password) { setFormError('Name, mobile number and password are required'); return; }
+    if (phone.length !== 10) { setFormError('Mobile number must be exactly 10 digits'); return; }
     if (password.length < 6) { setFormError('Password must be at least 6 characters'); return; }
     createMutation.mutate();
   };
 
   const handleEditSubmit = (e: React.FormEvent) => {
     e.preventDefault(); setFormError(null);
+    if (!phone) { setFormError('Mobile number is required'); return; }
+    if (phone.length !== 10) { setFormError('Mobile number must be exactly 10 digits'); return; }
     updateMutation.mutate();
   };
 
@@ -161,7 +181,7 @@ export const UserManagement: React.FC = () => {
   };
 
   const handleDelete = (u: User) => {
-    if (window.confirm(`Are you sure you want to delete user "${u.name}" (${u.email})?`)) {
+    if (window.confirm(`Are you sure you want to delete user "${u.name}" (${u.phone})?`)) {
       deleteMutation.mutate(u.id);
     }
   };
@@ -176,7 +196,7 @@ export const UserManagement: React.FC = () => {
             <div>
               <CardTitle>User Account Management</CardTitle>
               <CardDescription>
-                Create, update, and manage system user accounts and their role-based access. Each user can log in with their email and password.
+                Create, update, and manage system user accounts and their role-based access. Each user can log in with their Indian mobile number and password.
               </CardDescription>
             </div>
           </div>
@@ -194,12 +214,12 @@ export const UserManagement: React.FC = () => {
             <div>
               <p className="text-sm font-semibold text-amber-400 mb-2">Default Seeded Login Credentials</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-1 text-xs font-mono text-muted-foreground">
-                <span>admin@hospital.in → <span className="text-foreground font-semibold">admin123</span> (Super Admin)</span>
-                <span>establishment@hospital.in → <span className="text-foreground font-semibold">admin123</span> (Est. Officer)</span>
-                <span>payroll@hospital.in → <span className="text-foreground font-semibold">admin123</span> (Payroll Officer)</span>
-                <span>management@hospital.in → <span className="text-foreground font-semibold">admin123</span> (Management)</span>
-                <span>supervisor@hospital.in → <span className="text-foreground font-semibold">super123</span> (Supervisor)</span>
-                <span>ramesh@hospital.in → <span className="text-foreground font-semibold">emp123</span> (Employee)</span>
+                <span>9999999990 → <span className="text-foreground font-semibold">admin123</span> (Super Admin)</span>
+                <span>9999999991 → <span className="text-foreground font-semibold">admin123</span> (Est. Officer)</span>
+                <span>9999999992 → <span className="text-foreground font-semibold">admin123</span> (Payroll Officer)</span>
+                <span>9999999993 → <span className="text-foreground font-semibold">admin123</span> (Management)</span>
+                <span>9999999994 → <span className="text-foreground font-semibold">super123</span> (Supervisor)</span>
+                <span>9876543210 → <span className="text-foreground font-semibold">emp123</span> (Employee)</span>
               </div>
             </div>
           </div>
@@ -218,7 +238,8 @@ export const UserManagement: React.FC = () => {
               <TableHeader>
                 <TableRow className="bg-muted/40">
                   <TableHead>Name</TableHead>
-                  <TableHead>Email / Login</TableHead>
+                  <TableHead>Mobile (Login)</TableHead>
+                  <TableHead>Email Address</TableHead>
                   <TableHead>Role</TableHead>
                   <TableHead>Linked Employee</TableHead>
                   <TableHead>Created</TableHead>
@@ -228,7 +249,7 @@ export const UserManagement: React.FC = () => {
               <TableBody>
                 {users.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-16 text-muted-foreground">
+                    <TableCell colSpan={7} className="text-center py-16 text-muted-foreground">
                       <Users className="mx-auto mb-3 opacity-30" size={36} />
                       No users found. Click "Add User" to create the first account.
                     </TableCell>
@@ -236,7 +257,8 @@ export const UserManagement: React.FC = () => {
                 ) : users.map((u) => (
                   <TableRow key={u.id} className="hover:bg-muted/40">
                     <TableCell className="font-semibold">{u.name}</TableCell>
-                    <TableCell className="text-sm font-mono text-muted-foreground">{u.email}</TableCell>
+                    <TableCell className="text-sm font-mono text-primary font-bold">{u.phone}</TableCell>
+                    <TableCell className="text-sm text-muted-foreground">{u.email || '—'}</TableCell>
                     <TableCell>
                       <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium border ${ROLE_BADGE_COLORS[u.role]}`}>
                         {roleLabel(u.role)}
@@ -285,7 +307,29 @@ export const UserManagement: React.FC = () => {
           <form onSubmit={handleCreateSubmit} className="space-y-4 mt-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormInput label="Full Name *" placeholder="User full name" value={name} onChange={(e) => setName(e.target.value)} required />
-              <FormInput label="Email / Login *" type="email" placeholder="user@hospital.in" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Mobile Number (Login) *</label>
+                <div className="relative flex items-center">
+                  <div className="absolute left-3 flex items-center pointer-events-none select-none font-mono text-sm text-muted-foreground border-r pr-2 gap-1">
+                    <span>🇮🇳</span>
+                    <span>+91</span>
+                  </div>
+                  <input
+                    type="tel"
+                    pattern="[0-9]{10}"
+                    className="flex h-10 w-full rounded-lg border border-input bg-background pr-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                    placeholder="10-digit number"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    style={{ paddingLeft: '72px' }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <FormInput label="Email Address (Optional)" type="email" placeholder="user@hospital.in" value={email} onChange={(e) => setEmail(e.target.value)} />
+              
               <div className="space-y-2">
                 <label className="text-sm font-medium">Password * <span className="text-muted-foreground text-xs">(min. 6 chars)</span></label>
                 <div className="relative">
@@ -302,6 +346,7 @@ export const UserManagement: React.FC = () => {
                   </button>
                 </div>
               </div>
+              
               <FormSelect
                 label="System Role *"
                 value={role}
@@ -344,7 +389,29 @@ export const UserManagement: React.FC = () => {
           <form onSubmit={handleEditSubmit} className="space-y-4 mt-2">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <FormInput label="Full Name *" value={name} onChange={(e) => setName(e.target.value)} required />
-              <FormInput label="Email / Login *" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+              
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Mobile Number (Login) *</label>
+                <div className="relative flex items-center">
+                  <div className="absolute left-3 flex items-center pointer-events-none select-none font-mono text-sm text-muted-foreground border-r pr-2 gap-1">
+                    <span>🇮🇳</span>
+                    <span>+91</span>
+                  </div>
+                  <input
+                    type="tel"
+                    pattern="[0-9]{10}"
+                    className="flex h-10 w-full rounded-lg border border-input bg-background pr-3 py-2 text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/30"
+                    placeholder="10-digit number"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+                    style={{ paddingLeft: '72px' }}
+                    required
+                  />
+                </div>
+              </div>
+
+              <FormInput label="Email Address (Optional)" type="email" value={email} onChange={(e) => setEmail(e.target.value)} />
+              
               <FormSelect
                 label="System Role *"
                 value={role}
@@ -407,7 +474,7 @@ export const UserManagement: React.FC = () => {
             <DialogFooter className="pt-2">
               <Button type="button" variant="outline" onClick={closeModal}>Cancel</Button>
               <Button type="submit" className="bg-amber-500 hover:bg-amber-600 text-white" disabled={changePasswordMutation.isPending}>
-                {changePasswordMutation.isPending ? 'Updating...' : 'Update Password'}
+                {changePasswordMutation.isPending ? 'Update Password' : 'Update Password'}
               </Button>
             </DialogFooter>
           </form>
@@ -416,3 +483,4 @@ export const UserManagement: React.FC = () => {
     </div>
   );
 };
+export default UserManagement;

@@ -12,6 +12,7 @@ export class UsersService {
       select: {
         id: true,
         name: true,
+        phone: true,
         email: true,
         role: true,
         employeeId: true,
@@ -30,6 +31,7 @@ export class UsersService {
       select: {
         id: true,
         name: true,
+        phone: true,
         email: true,
         role: true,
         employeeId: true,
@@ -44,19 +46,20 @@ export class UsersService {
   }
 
   async create(dto: CreateUserDto) {
-    const existing = await this.prisma.user.findUnique({ where: { email: dto.email } });
-    if (existing) throw new ConflictException('A user with this email already exists');
+    const existing = await this.prisma.user.findUnique({ where: { phone: dto.phone } });
+    if (existing) throw new ConflictException('A user with this mobile number already exists');
 
     const hashed = await bcrypt.hash(dto.password, 10);
     return this.prisma.user.create({
       data: {
         name: dto.name,
-        email: dto.email,
+        phone: dto.phone,
+        email: dto.email || null,
         password: hashed,
         role: dto.role as any,
         ...(dto.employeeId ? { employeeId: dto.employeeId } : {}),
       },
-      select: { id: true, name: true, email: true, role: true, createdAt: true },
+      select: { id: true, name: true, phone: true, email: true, role: true, createdAt: true },
     });
   }
 
@@ -65,7 +68,14 @@ export class UsersService {
 
     const data: any = {};
     if (dto.name) data.name = dto.name;
-    if (dto.email) data.email = dto.email;
+    if (dto.phone) {
+      const existing = await this.prisma.user.findFirst({
+        where: { phone: dto.phone, NOT: { id } },
+      });
+      if (existing) throw new ConflictException('A user with this mobile number already exists');
+      data.phone = dto.phone;
+    }
+    if (dto.email !== undefined) data.email = dto.email || null;
     if (dto.role) data.role = dto.role;
     if (dto.employeeId !== undefined) data.employeeId = dto.employeeId || null;
     if (dto.password) data.password = await bcrypt.hash(dto.password, 10);
@@ -73,7 +83,7 @@ export class UsersService {
     return this.prisma.user.update({
       where: { id },
       data,
-      select: { id: true, name: true, email: true, role: true, createdAt: true },
+      select: { id: true, name: true, phone: true, email: true, role: true, createdAt: true },
     });
   }
 
