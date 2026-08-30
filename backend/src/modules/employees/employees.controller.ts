@@ -26,8 +26,8 @@ export class EmployeesController {
   constructor(private service: EmployeesService) {}
 
   @Get()
-  findAll(@Query() query: QueryEmployeeDto) {
-    return this.service.findAll(query);
+  findAll(@Query() query: QueryEmployeeDto, @CurrentUser() user: any) {
+    return this.service.findAll(query, user);
   }
 
   @Get('stats')
@@ -40,7 +40,12 @@ export class EmployeesController {
     return this.service.findOne(id);
   }
 
-  @Roles('ADMIN')
+  @Get(':id/service-history')
+  getServiceHistory(@Param('id') id: string) {
+    return this.service.getServiceHistory(id);
+  }
+
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
   @Post()
   @UseInterceptors(FileInterceptor('photo', { storage: photoStorage }))
   create(@Body() dto: CreateEmployeeDto, @UploadedFile() file?: Express.Multer.File) {
@@ -48,7 +53,7 @@ export class EmployeesController {
     return this.service.create(dto, photoPath);
   }
 
-  @Roles('ADMIN', 'SUPERVISOR')
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR')
   @Patch(':id')
   @UseInterceptors(FileInterceptor('photo', { storage: photoStorage }))
   update(
@@ -61,7 +66,7 @@ export class EmployeesController {
     return this.service.update(id, dto, user, photoPath);
   }
 
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);

@@ -4,8 +4,8 @@ generator client {
 
 datasource db {
   provider  = "postgresql"
-  url       = env("DATABASE_URL")   // Supabase pooled (pgbouncer) — used at runtime
-  directUrl = env("DIRECT_URL")     // Supabase direct — used by prisma migrate / prisma db push
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum UserRole {
@@ -42,9 +42,12 @@ enum EmployeeStatus {
 }
 
 enum ContractType {
+  DAYS_89
+  DAYS_178
+  ONE_YEAR
+  EXTENSION
   THREE_MONTHS
   SIX_MONTHS
-  ONE_YEAR
   CUSTOM
 }
 
@@ -91,6 +94,27 @@ enum LeaveType {
   OTHER
 }
 
+enum DocumentCategory {
+  APPLICATION
+  PHOTO
+  ID_AADHAAR
+  APPOINTMENT
+  JOINING
+  AGREEMENT
+  ID_CARD
+  BANK
+  LEAVE
+  SERVICE_BREAK
+  EXTENSION
+  RENEWAL
+  PAY_REVISION
+  MEMO_WARNING
+  RESIGNATION
+  TERMINATION
+  FINAL_SETTLEMENT
+  OTHER
+}
+
 model User {
   id           String    @id @default(uuid())
   name         String
@@ -120,14 +144,15 @@ model Department {
 }
 
 model Section {
-  id           String     @id @default(uuid())
+  id           String        @id @default(uuid())
   name         String
-  code         String     @unique
+  code         String        @unique
   departmentId String
-  department   Department @relation(fields: [departmentId], references: [id])
+  department   Department    @relation(fields: [departmentId], references: [id])
   employees    Employee[]
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  appointments Appointment[]
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
   @@map("sections")
 }
@@ -151,29 +176,34 @@ model Designation {
 }
 
 model Employee {
-  id               String               @id @default(uuid())
-  code             String               @unique
+  id               String                @id @default(uuid())
+  code             String                @unique
   name             String
   photo            String?
   address          String
   phone            String
-  email            String               @unique
+  email            String                @unique
   gender           Gender
   dateOfBirth      DateTime
   idDetails        String?
-  shift            Shift                @default(GENERAL)
+  shift            Shift                 @default(GENERAL)
+  bankName         String?
+  accountNumber    String?
+  ifscCode         String?
+  panNumber        String?
+  appointmentType  ContractType?
   departmentId     String
-  department       Department           @relation(fields: [departmentId], references: [id])
+  department       Department            @relation(fields: [departmentId], references: [id])
   sectionId        String?
-  section          Section?             @relation(fields: [sectionId], references: [id])
+  section          Section?              @relation(fields: [sectionId], references: [id])
   supervisorId     String?
-  supervisor       Employee?            @relation("SupervisorEmployees", fields: [supervisorId], references: [id])
-  supervisees      Employee[]           @relation("SupervisorEmployees")
+  supervisor       Employee?             @relation("SupervisorEmployees", fields: [supervisorId], references: [id])
+  supervisees      Employee[]            @relation("SupervisorEmployees")
   designationId    String
-  designation      Designation          @relation(fields: [designationId], references: [id])
+  designation      Designation           @relation(fields: [designationId], references: [id])
   salary           Float
   joiningDate      DateTime
-  status           EmployeeStatus       @default(ACTIVE)
+  status           EmployeeStatus        @default(ACTIVE)
   user             User?
   appointments     Appointment[]
   attendances      Attendance[]
@@ -184,63 +214,78 @@ model Employee {
   payRevisions     PayRevision[]
   finalSettlement  FinalSettlement?
   leaves           Leave[]
-  createdAt        DateTime             @default(now())
-  updatedAt        DateTime             @updatedAt
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
 
   @@map("employees")
 }
 
 model Appointment {
-  id                 String            @id @default(uuid())
-  orderNumber        String            @unique
-  employeeId         String
-  employee           Employee          @relation(fields: [employeeId], references: [id])
-  contractType       ContractType
-  startDate          DateTime
-  endDate            DateTime
-  salary             Float
-  designationId      String
-  designation        Designation       @relation(fields: [designationId], references: [id])
-  departmentId       String
-  department         Department        @relation(fields: [departmentId], references: [id])
-  termsAndConditions String
-  status             AppointmentStatus @default(ACTIVE)
-  renewals           ContractRenewal[]
-  createdAt          DateTime          @default(now())
-  updatedAt          DateTime          @updatedAt
+  id                     String            @id @default(uuid())
+  orderNumber            String            @unique
+  orderDate              DateTime?
+  employeeId             String
+  employee               Employee          @relation(fields: [employeeId], references: [id])
+  contractType           ContractType
+  startDate              DateTime
+  endDate                DateTime
+  salary                 Float
+  designationId          String
+  designation            Designation       @relation(fields: [designationId], references: [id])
+  departmentId           String
+  department             Department        @relation(fields: [departmentId], references: [id])
+  sectionId              String?
+  section                Section?          @relation(fields: [sectionId], references: [id])
+  termsAndConditions     String
+  status                 AppointmentStatus @default(ACTIVE)
+  joiningReportUrl       String?
+  agreementUrl           String?
+  appointmentPdfUrl      String?
+  previousAppointmentId  String?
+  previousAppointment    Appointment?      @relation("AppointmentExtensions", fields: [previousAppointmentId], references: [id])
+  extensions             Appointment[]     @relation("AppointmentExtensions")
+  serviceBreakApplicable Boolean           @default(false)
+  breakDueDate           DateTime?
+  renewals               ContractRenewal[]
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
 
   @@map("appointments")
 }
 
 model Attendance {
-  id             String           @id @default(uuid())
-  employeeId     String
-  employee       Employee         @relation(fields: [employeeId], references: [id])
-  date           DateTime         @db.Date
-  status         AttendanceStatus
-  approvalStatus ApprovalStatus   @default(PENDING)
-  approvedById   String?
-  remarks        String?
-  createdAt      DateTime         @default(now())
-  updatedAt      DateTime         @updatedAt
+  id                    String           @id @default(uuid())
+  employeeId            String
+  employee              Employee         @relation(fields: [employeeId], references: [id])
+  date                  DateTime         @db.Date
+  status                AttendanceStatus
+  approvalStatus        ApprovalStatus   @default(PENDING)
+  approvedById          String?
+  establishmentVerified Boolean          @default(false)
+  verifiedById          String?
+  remarks               String?
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
 
   @@unique([employeeId, date])
   @@map("attendance")
 }
 
 model Leave {
-  id             String         @id @default(uuid())
-  employeeId     String
-  employee       Employee       @relation(fields: [employeeId], references: [id])
-  leaveType      LeaveType
-  startDate      DateTime
-  endDate        DateTime
-  reason         String
-  status         ApprovalStatus @default(PENDING)
-  approvedById   String?
-  remarks        String?
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  id                  String         @id @default(uuid())
+  employeeId          String
+  employee            Employee       @relation(fields: [employeeId], references: [id])
+  leaveType           LeaveType
+  startDate           DateTime
+  endDate             DateTime
+  reason              String
+  status              ApprovalStatus @default(PENDING)
+  supervisorStatus    ApprovalStatus @default(PENDING)
+  establishmentStatus ApprovalStatus @default(PENDING)
+  approvedById        String?
+  remarks             String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
 
   @@map("leaves")
 }
@@ -286,32 +331,38 @@ model PayStructure {
 }
 
 model PayRevision {
-  id            String   @id @default(uuid())
+  id            String         @id @default(uuid())
   employeeId    String
-  employee      Employee @relation(fields: [employeeId], references: [id])
+  employee      Employee       @relation(fields: [employeeId], references: [id])
   oldBasicPay   Float
   newBasicPay   Float
+  oldWeightage  Float          @default(0)
+  newWeightage  Float          @default(0)
+  oldAllowance  Float          @default(0)
+  newAllowance  Float          @default(0)
   effectiveDate DateTime
   reason        String?
   orderNumber   String?
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  status        ApprovalStatus @default(PENDING)
+  approvedById  String?
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
   @@map("pay_revisions")
 }
 
 model ServiceBreak {
-  id             String   @id @default(uuid())
+  id             String    @id @default(uuid())
   employeeId     String
-  employee       Employee @relation(fields: [employeeId], references: [id])
+  employee       Employee  @relation(fields: [employeeId], references: [id])
   orderNumber    String?
   orderDate      DateTime?
   breakStartDate DateTime
   breakEndDate   DateTime
   reason         String
   remarks        String?
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
 
   @@map("service_breaks")
 }
@@ -331,35 +382,44 @@ model ContractRenewal {
 }
 
 model ContractTermination {
-  id              String   @id @default(uuid())
-  employeeId      String
-  employee        Employee @relation(fields: [employeeId], references: [id])
-  terminationDate DateTime
-  reason          String
-  remarks         String?
-  createdAt       DateTime @default(now())
-  updatedAt       DateTime @updatedAt
+  id                  String    @id @default(uuid())
+  employeeId          String
+  employee            Employee  @relation(fields: [employeeId], references: [id])
+  terminationDate     DateTime
+  reason              String
+  noticePeriodDays    Int       @default(0)
+  departmentClearance Boolean   @default(false)
+  financeClearance    Boolean   @default(false)
+  hrClearance         Boolean   @default(false)
+  idCardReturned      Boolean   @default(false)
+  uniformReturned     Boolean   @default(false)
+  propertyReturned    Boolean   @default(false)
+  resignationFileUrl  String?
+  terminationOrderUrl String?
+  remarks             String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
 
   @@map("contract_terminations")
 }
 
 model FinalSettlement {
-  id                 String   @id @default(uuid())
-  employeeId         String   @unique
-  employee           Employee @relation(fields: [employeeId], references: [id])
-  lastWorkingDate    DateTime
-  pendingSalary      Float    @default(0)
-  leaveAdjustments   Float    @default(0)
-  otPay              Float    @default(0)
-  advanceDeductions  Float    @default(0)
-  otherAdjustments   Float    @default(0)
-  netPayable         Float
+  id                  String   @id @default(uuid())
+  employeeId          String   @unique
+  employee            Employee @relation(fields: [employeeId], references: [id])
+  lastWorkingDate     DateTime
+  pendingSalary       Float    @default(0)
+  leaveAdjustments    Float    @default(0)
+  otPay               Float    @default(0)
+  advanceDeductions   Float    @default(0)
+  otherAdjustments    Float    @default(0)
+  netPayable          Float
   departmentClearance Boolean  @default(false)
-  financeClearance   Boolean  @default(false)
-  hrClearance        Boolean  @default(false)
-  settlementDate     DateTime @default(now())
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
+  financeClearance    Boolean  @default(false)
+  hrClearance         Boolean  @default(false)
+  settlementDate      DateTime @default(now())
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 
   @@map("final_settlements")
 }
@@ -376,13 +436,14 @@ model SystemSetting {
 }
 
 model EmployeeDocument {
-  id          String   @id @default(uuid())
+  id          String           @id @default(uuid())
   employeeId  String
-  employee    Employee @relation(fields: [employeeId], references: [id])
+  employee    Employee         @relation(fields: [employeeId], references: [id])
   name        String
+  category    DocumentCategory @default(OTHER)
   fileType    String
   fileUrl     String
-  uploadedAt  DateTime @default(now())
+  uploadedAt  DateTime         @default(now())
 
   @@map("employee_documents")
 }

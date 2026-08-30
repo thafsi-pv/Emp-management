@@ -7,15 +7,17 @@ import { paginate } from '../../common/dto/pagination.dto';
 
 const EMPLOYEE_INCLUDE = {
   department: { select: { id: true, name: true, code: true } },
+  section: { select: { id: true, name: true, code: true } },
   designation: { select: { id: true, name: true, code: true } },
+  supervisor: { select: { id: true, name: true, code: true } },
 };
 
 @Injectable()
 export class EmployeesService {
   constructor(private prisma: PrismaService) {}
 
-  async findAll(query: QueryEmployeeDto) {
-    const { search, departmentId, designationId, status, page = 1, limit = 10 } = query;
+  async findAll(query: QueryEmployeeDto, user?: any) {
+    const { search, departmentId, sectionId, designationId, supervisorId, status, page = 1, limit = 100 } = query;
     const skip = (page - 1) * limit;
 
     const where: any = {};
@@ -27,8 +29,14 @@ export class EmployeesService {
       ];
     }
     if (departmentId) where.departmentId = departmentId;
+    if (sectionId) where.sectionId = sectionId;
     if (designationId) where.designationId = designationId;
+    if (supervisorId) where.supervisorId = supervisorId;
     if (status) where.status = status;
+
+    if (user && user.role === 'SUPERVISOR' && user.employeeId) {
+      where.supervisorId = user.employeeId;
+    }
 
     const [data, total] = await Promise.all([
       this.prisma.employee.findMany({ where, include: EMPLOYEE_INCLUDE, skip, take: limit, orderBy: { createdAt: 'desc' } }),
@@ -44,32 +52,117 @@ export class EmployeesService {
       include: {
         ...EMPLOYEE_INCLUDE,
         appointments: {
-          include: { department: true, designation: true },
+          include: { department: true, section: true, designation: true },
           orderBy: { createdAt: 'desc' },
         },
         attendances: { orderBy: { date: 'desc' }, take: 30 },
         payrolls: { orderBy: { createdAt: 'desc' }, take: 12 },
         serviceBreaks: { orderBy: { breakStartDate: 'desc' } },
+        documents: { orderBy: { uploadedAt: 'desc' } },
+        payRevisions: { orderBy: { effectiveDate: 'desc' } },
+        terminations: { orderBy: { createdAt: 'desc' } },
+        leaves: { orderBy: { startDate: 'desc' } },
       },
     });
     if (!employee) throw new NotFoundException('Employee not found');
     return employee;
   }
 
+  async getServiceHistory(id: string) {
+    const emp = await this.findOne(id);
+
+    const timeline: any[] = [];
+
+    // Joining
+    timeline.push({
+      date: emp.joiningDate,
+      type: 'JOINING',
+      title: 'Joined Service',
+      description: `Joined as ${emp.designation?.name} in ${emp.department?.name}${emp.section ? ' (' + emp.section.name + ')' : ''}`,
+    });
+
+    // Appointments
+    (emp.appointments || []).forEach((apt) => {
+      timeline.push({
+        date: apt.startDate,
+        type: apt.contractType === 'EXTENSION' ? 'EXTENSION' : 'APPOINTMENT',
+        title: `Appointment Order (${apt.contractType})`,
+        description: `Order No: ${apt.orderNumber}, Duration: ${new Date(apt.startDate).toLocaleDateString()} to ${new Date(apt.endDate).toLocaleDateString()}`,
+        details: apt,
+      });
+    });
+
+    // Service Breaks
+    (emp.serviceBreaks || []).forEach((sb) => {
+      timeline.push({
+        date: sb.breakStartDate,
+        type: 'SERVICE_BREAK',
+        title: 'Service Break',
+        description: `Reason: ${sb.reason}. Period: ${new Date(sb.breakStartDate).toLocaleDateString()} to ${new Date(sb.breakEndDate).toLocaleDateString()}`,
+        details: sb,
+      });
+    });
+
+    // Pay Revisions
+    (emp.payRevisions || []).forEach((pr) => {
+      timeline.push({
+        date: pr.effectiveDate,
+        type: 'PAY_REVISION',
+        title: 'Pay Revision',
+        description: `Basic Pay revised from ${pr.oldBasicPay} to ${pr.newBasicPay}. Reason: ${pr.reason || 'Annual Revision'}`,
+        details: pr,
+      });
+    });
+
+    // Leaves
+    (emp.leaves || []).forEach((lv) => {
+      timeline.push({
+        date: lv.startDate,
+        type: 'LEAVE',
+        title: `Leave Applied (${lv.leaveType})`,
+        description: `Status: ${lv.status}. Period: ${new Date(lv.startDate).toLocaleDateString()} to ${new Date(lv.endDate).toLocaleDateString()}`,
+        details: lv,
+      });
+    });
+
+    // Terminations
+    (emp.terminations || []).forEach((tm) => {
+      timeline.push({
+        date: tm.terminationDate,
+        type: 'TERMINATION',
+        title: 'Service Termination / Resignation',
+        description: `Reason: ${tm.reason}`,
+        details: tm,
+      });
+    });
+
+    timeline.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+    return {
+      employee: {
+        id: emp.id,
+        code: emp.code,
+        name: emp.name,
+        department: emp.department?.name,
+        designation: emp.designation?.name,
+        status: emp.status,
+      },
+      timeline,
+    };
+  }
+
   async create(dto: CreateEmployeeDto, photoPath?: string) {
     let finalCode = dto.code;
 
     if (!finalCode) {
-      // Auto-generate code
       const prefixSetting = await this.prisma.systemSetting.findUnique({
         where: { key: 'EMP_CODE_PREFIX' }
       });
       const prefix = prefixSetting?.value || 'EMP-';
 
-      // Find the latest employee code starting with the prefix
       const latestEmp = await this.prisma.employee.findFirst({
         where: { code: { startsWith: prefix } },
-        orderBy: { code: 'desc' }, // This assumes padded numbers like EMP-001, EMP-002
+        orderBy: { code: 'desc' },
       });
 
       let nextNum = 1;
@@ -93,7 +186,8 @@ export class EmployeesService {
       data: {
         ...dto,
         code: finalCode,
-        photo: photoPath ?? null,
+        photo: photoPath ?? dto.photo ?? null,
+        appointmentType: dto.appointmentType as any,
         dateOfBirth: new Date(dto.dateOfBirth),
         joiningDate: new Date(dto.joiningDate),
       },
@@ -129,12 +223,16 @@ export class EmployeesService {
   }
 
   async getStats() {
-    const [total, active, inactive, terminated] = await Promise.all([
+    const [total, active, leave, off, serviceBreak, expired, resigned, terminated] = await Promise.all([
       this.prisma.employee.count(),
       this.prisma.employee.count({ where: { status: 'ACTIVE' } }),
-      this.prisma.employee.count({ where: { status: 'INACTIVE' } }),
+      this.prisma.employee.count({ where: { status: 'LEAVE' } }),
+      this.prisma.employee.count({ where: { status: 'OFF' } }),
+      this.prisma.employee.count({ where: { status: 'SERVICE_BREAK' } }),
+      this.prisma.employee.count({ where: { status: 'EXPIRED' } }),
+      this.prisma.employee.count({ where: { status: 'RESIGNED' } }),
       this.prisma.employee.count({ where: { status: 'TERMINATED' } }),
     ]);
-    return { total, active, inactive, terminated };
+    return { total, active, leave, off, serviceBreak, expired, resigned, terminated };
   }
 }

@@ -9,9 +9,10 @@ import { getDaysInMonth } from 'date-fns';
 const PAYROLL_INCLUDE = {
   employee: {
     select: {
-      id: true, name: true, code: true, photo: true,
+      id: true, name: true, code: true, photo: true, bankName: true, accountNumber: true, ifscCode: true,
       department: { select: { id: true, name: true } },
-      designation: { select: { id: true, name: true } },
+      section: { select: { id: true, name: true } },
+      designation: { select: { id: true, name: true, payType: true, basicPay: true, weightage: true, allowance: true, otRate: true } },
     },
   },
 };
@@ -21,7 +22,7 @@ export class PayrollService {
   constructor(private prisma: PrismaService) {}
 
   async findAll(query: QueryPayrollDto) {
-    const { employeeId, month, year, status, page = 1, limit = 10 } = query;
+    const { employeeId, month, year, status, page = 1, limit = 100 } = query;
     const skip = (page - 1) * limit;
     const where: any = {};
     if (employeeId) where.employeeId = employeeId;
@@ -48,17 +49,17 @@ export class PayrollService {
   async generate(dto: GeneratePayrollDto) {
     const { employeeId, month, year } = dto;
 
-    // Check for duplicate
     const existing = await this.prisma.payroll.findUnique({
       where: { employeeId_month_year: { employeeId, month, year } },
     });
     if (existing) throw new ConflictException('Payroll already generated for this employee and period');
 
-    // Get employee
-    const employee = await this.prisma.employee.findUnique({ where: { id: employeeId } });
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: employeeId },
+      include: { designation: true, department: true, section: true },
+    });
     if (!employee) throw new NotFoundException('Employee not found');
 
-    // Calculate working days and worked days from attendance
     const totalWorkingDays = this.getWorkingDaysInMonth(parseInt(month), year);
 
     const attendanceRecords = await this.prisma.attendance.findMany({
@@ -72,23 +73,33 @@ export class PayrollService {
       },
     });
 
-    // PRESENT = 1 day, HALF_DAY = 0.5 days, ABSENT/LEAVE = 0
     const workedDays = attendanceRecords.reduce((sum, r) => {
-      if (r.status === 'PRESENT') return sum + 1;
+      if (r.status === 'PRESENT' || r.status === 'OD' || r.status === 'HOLIDAY') return sum + 1;
       if (r.status === 'HALF_DAY') return sum + 0.5;
       return sum;
     }, 0);
 
-    const basicSalary = employee.salary;
-    const allowance = dto.allowance ?? 0;
+    const designation = employee.designation;
+    const isDaily = designation.payType === 'DAILY';
+
+    const basicSalary = isDaily ? (designation.basicPay || employee.salary) : (employee.salary || designation.basicPay);
+    const weightage = designation.weightage || 0;
+    const allowance = dto.allowance ?? (designation.allowance || 0);
     const bonus = dto.bonus ?? 0;
     const gratuity = dto.gratuity ?? 0;
     const deduction = dto.deduction ?? 0;
     const overtime = dto.overtime ?? 0;
 
-    // Formula: (basicSalary / totalWorkingDays) * workedDays + allowances - deductions
-    const earnedBasic = totalWorkingDays > 0 ? (basicSalary / totalWorkingDays) * workedDays : 0;
-    const netSalary = earnedBasic + allowance + bonus + gratuity + overtime - deduction;
+    let netSalary: number;
+
+    if (isDaily) {
+      // Daily Pay = Basic × Eligible Days + Weightage + OT + Allowances − Deductions
+      netSalary = (basicSalary * workedDays) + weightage + overtime + allowance + bonus + gratuity - deduction;
+    } else {
+      // Monthly Pay = Monthly Basic + Weightage + Allowances + OT − Deductions
+      const earnedBasic = totalWorkingDays > 0 ? (basicSalary / totalWorkingDays) * workedDays : basicSalary;
+      netSalary = earnedBasic + weightage + allowance + bonus + gratuity + overtime - deduction;
+    }
 
     return this.prisma.payroll.create({
       data: {
@@ -161,7 +172,7 @@ export class PayrollService {
     let workingDays = 0;
     for (let d = 1; d <= days; d++) {
       const dayOfWeek = new Date(year, month - 1, d).getDay();
-      if (dayOfWeek !== 0 && dayOfWeek !== 5) workingDays++; // Skip Fri & Sat (UAE weekend)
+      if (dayOfWeek !== 0 && dayOfWeek !== 6) workingDays++; // Skip weekends (Sat & Sun)
     }
     return workingDays;
   }

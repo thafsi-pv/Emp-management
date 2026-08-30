@@ -1,12 +1,12 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/client';
-import { Briefcase, Plus, Printer, Download } from 'lucide-react';
+import { Briefcase, Plus, Printer, Download, Link2 } from 'lucide-react';
 
 interface AppointmentRecord {
   id: string;
   orderNumber: string;
-  contractType: 'THREE_MONTHS' | 'SIX_MONTHS' | 'ONE_YEAR' | 'CUSTOM';
+  contractType: 'DAYS_89' | 'DAYS_178' | 'ONE_YEAR' | 'EXTENSION' | 'THREE_MONTHS' | 'SIX_MONTHS' | 'CUSTOM';
   startDate: string;
   endDate: string;
   salary: number;
@@ -17,7 +17,9 @@ interface AppointmentRecord {
     code: string;
   };
   department: { name: string };
+  section?: { name: string };
   designation: { name: string };
+  previousAppointment?: { orderNumber: string; endDate: string };
 }
 
 export const Appointments: React.FC = () => {
@@ -25,12 +27,15 @@ export const Appointments: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [employeeId, setEmployeeId] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
-  const [contractType, setContractType] = useState<'THREE_MONTHS' | 'SIX_MONTHS' | 'ONE_YEAR' | 'CUSTOM'>('THREE_MONTHS');
+  const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
+  const [contractType, setContractType] = useState<string>('DAYS_89');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState('');
   const [salary, setSalary] = useState('');
   const [departmentId, setDepartmentId] = useState('');
+  const [sectionId, setSectionId] = useState('');
   const [designationId, setDesignationId] = useState('');
+  const [previousAppointmentId, setPreviousAppointmentId] = useState('');
   const [terms, setTerms] = useState('Standard employment contract terms applied.');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -52,7 +57,7 @@ export const Appointments: React.FC = () => {
     },
   });
 
-  // Fetch departments & designations
+  // Fetch departments, sections & designations
   const { data: deptRes } = useQuery({ queryKey: ['departments'], queryFn: async () => (await apiClient.get('/api/departments')).data });
   const { data: desigRes } = useQuery({ queryKey: ['designations'], queryFn: async () => (await apiClient.get('/api/designations')).data });
 
@@ -60,14 +65,14 @@ export const Appointments: React.FC = () => {
   const handleTypeOrDateChange = (type: string, start: string) => {
     if (!start) return;
     const sDate = new Date(start);
-    let computed = new Date(start);
+    const computed = new Date(start);
 
-    if (type === 'THREE_MONTHS') {
-      computed.setDate(sDate.getDate() + 89);
-    } else if (type === 'SIX_MONTHS') {
-      computed.setDate(sDate.getDate() + 178);
+    if (type === 'DAYS_89' || type === 'THREE_MONTHS') {
+      computed.setDate(sDate.getDate() + 88);
+    } else if (type === 'DAYS_178' || type === 'SIX_MONTHS') {
+      computed.setDate(sDate.getDate() + 177);
     } else if (type === 'ONE_YEAR') {
-      computed.setFullYear(sDate.getFullYear() + 1);
+      computed.setDate(sDate.getDate() + 364);
     }
     setEndDate(computed.toISOString().split('T')[0]);
   };
@@ -88,18 +93,16 @@ export const Appointments: React.FC = () => {
     },
   });
 
-  
-  
   const handlePrintPdf = async (aptId: string) => {
     try {
       const res = await apiClient.get(`/api/appointments/${aptId}/pdf`, { responseType: 'blob' });
       const blobUrl = URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }));
-      
+
       const iframe = document.createElement('iframe');
       iframe.style.display = 'none';
       iframe.src = blobUrl;
       document.body.appendChild(iframe);
-      
+
       iframe.onload = () => {
         iframe.contentWindow?.focus();
         iframe.contentWindow?.print();
@@ -132,12 +135,15 @@ export const Appointments: React.FC = () => {
   const resetForm = () => {
     setEmployeeId('');
     setOrderNumber('');
-    setContractType('THREE_MONTHS');
+    setOrderDate(new Date().toISOString().split('T')[0]);
+    setContractType('DAYS_89');
     setStartDate(new Date().toISOString().split('T')[0]);
     setEndDate('');
     setSalary('');
     setDepartmentId('');
+    setSectionId('');
     setDesignationId('');
+    setPreviousAppointmentId('');
     setErrorMsg(null);
   };
 
@@ -146,12 +152,15 @@ export const Appointments: React.FC = () => {
     createMutation.mutate({
       employeeId,
       orderNumber,
+      orderDate,
       contractType,
       startDate,
       endDate,
       salary: parseFloat(salary),
       departmentId,
+      sectionId: sectionId || undefined,
       designationId,
+      previousAppointmentId: previousAppointmentId || undefined,
       termsAndConditions: terms,
     });
   };
@@ -161,13 +170,16 @@ export const Appointments: React.FC = () => {
   const departments = deptRes?.data || [];
   const designations = desigRes?.data || [];
 
+  // Filter previous appointments for selected employee
+  const selectedEmployeeAppointments = appointments.filter(a => a.employee?.id === employeeId);
+
   return (
     <div style={styles.container}>
       <div className="card flex-between" style={{ padding: '20px 24px' }}>
         <div>
           <h3 style={{ fontSize: '18px', fontWeight: 700 }}>Appointment Orders & Extensions</h3>
           <p style={{ fontSize: '13px', color: 'var(--text-secondary)', marginTop: '2px' }}>
-            Issue 89-day, 178-day, 1-year appointments and extension orders without changing Employee IDs.
+            Issue 89-day, 178-day, 1-year appointments and extension orders linking previous appointments without changing Employee IDs.
           </p>
         </div>
         <button className="btn btn-primary" onClick={() => setIsModalOpen(true)} style={{ gap: '8px' }}>
@@ -198,7 +210,14 @@ export const Appointments: React.FC = () => {
               <tbody>
                 {appointments.map((apt) => (
                   <tr key={apt.id}>
-                    <td><strong style={{ color: 'var(--accent-secondary)' }}>{apt.orderNumber}</strong></td>
+                    <td>
+                      <strong style={{ color: 'var(--accent-secondary)' }}>{apt.orderNumber}</strong>
+                      {apt.previousAppointment && (
+                        <div style={{ fontSize: '10px', color: 'var(--accent-primary)', display: 'flex', alignItems: 'center', gap: '3px', marginTop: '2px' }}>
+                          <Link2 size={10} /> Ext. of {apt.previousAppointment.orderNumber}
+                        </div>
+                      )}
+                    </td>
                     <td>
                       <strong style={{ display: 'block' }}>{apt.employee?.name}</strong>
                       <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>{apt.employee?.code}</span>
@@ -257,10 +276,14 @@ export const Appointments: React.FC = () => {
                 </select>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
-                  <label className="form-label">Order Number *</label>
-                  <input type="text" className="form-input" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} placeholder="e.g. ORD-2026-089" required />
+                  <label className="form-label">Order Number</label>
+                  <input type="text" className="form-input" value={orderNumber} onChange={(e) => setOrderNumber(e.target.value)} placeholder="Auto-generated if empty" />
+                </div>
+                <div className="form-group">
+                  <label className="form-label">Order Date</label>
+                  <input type="date" className="form-input" value={orderDate} onChange={(e) => setOrderDate(e.target.value)} required />
                 </div>
                 <div className="form-group">
                   <label className="form-label">Contract Type *</label>
@@ -268,18 +291,31 @@ export const Appointments: React.FC = () => {
                     className="form-select"
                     value={contractType}
                     onChange={(e) => {
-                      const val = e.target.value as any;
+                      const val = e.target.value;
                       setContractType(val);
                       handleTypeOrDateChange(val, startDate);
                     }}
                   >
-                    <option value="THREE_MONTHS">89 Days Appointment</option>
-                    <option value="SIX_MONTHS">178 Days Appointment</option>
+                    <option value="DAYS_89">89 Days Appointment</option>
+                    <option value="DAYS_178">178 Days Appointment</option>
                     <option value="ONE_YEAR">One Year Appointment</option>
-                    <option value="CUSTOM">Custom Extension</option>
+                    <option value="EXTENSION">Extension Order (Links Previous)</option>
+                    <option value="CUSTOM">Custom Duration</option>
                   </select>
                 </div>
               </div>
+
+              {contractType === 'EXTENSION' && (
+                <div className="form-group" style={{ backgroundColor: 'rgba(59,130,246,0.1)', padding: '12px', borderRadius: '8px' }}>
+                  <label className="form-label">Link Previous Appointment *</label>
+                  <select className="form-select" value={previousAppointmentId} onChange={(e) => setPreviousAppointmentId(e.target.value)} required>
+                    <option value="">-- Select Previous Appointment --</option>
+                    {selectedEmployeeAppointments.map((a) => (
+                      <option key={a.id} value={a.id}>{a.orderNumber} ({a.contractType} - Ended {a.endDate.split('T')[0]})</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
@@ -301,7 +337,7 @@ export const Appointments: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Department *</label>
                   <select className="form-select" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} required>
@@ -316,15 +352,17 @@ export const Appointments: React.FC = () => {
                     {designations.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
                 </div>
+              </div>
+
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                 <div className="form-group">
                   <label className="form-label">Basic Salary (₹) *</label>
                   <input type="number" step="0.01" className="form-input" value={salary} onChange={(e) => setSalary(e.target.value)} required />
                 </div>
-              </div>
-
-              <div className="form-group">
-                <label className="form-label">Terms & Order Details</label>
-                <textarea className="form-input" rows={2} value={terms} onChange={(e) => setTerms(e.target.value)} />
+                <div className="form-group">
+                  <label className="form-label">Terms & Order Details</label>
+                  <input type="text" className="form-input" value={terms} onChange={(e) => setTerms(e.target.value)} />
+                </div>
               </div>
 
               <div className="flex-between" style={{ marginTop: '12px' }}>
@@ -347,7 +385,7 @@ const styles: Record<string, React.CSSProperties> = {
   spinner: { width: '32px', height: '32px', border: '3px solid rgba(255,255,255,0.05)', borderTopColor: 'var(--accent-secondary)', borderRadius: '50%', animation: 'spin 1s linear infinite' },
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', textAlign: 'center' },
   modalBackdrop: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(4px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
-  modalContent: { width: '100%', maxWidth: '640px', padding: '24px' },
+  modalContent: { width: '100%', maxWidth: '680px', padding: '24px' },
   errorBox: { backgroundColor: 'var(--color-danger-bg)', color: 'var(--color-danger)', padding: '12px 16px', borderRadius: 'var(--radius-sm)', fontSize: '13px', marginBottom: '16px' },
   form: { display: 'flex', flexDirection: 'column', gap: '16px' },
 };
