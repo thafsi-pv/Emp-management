@@ -7,6 +7,7 @@ import { join } from 'path';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
 import { RolesGuard } from './auth/guards/roles.guard';
+import { StorageModule } from './common/services/storage.module';
 
 import { DepartmentsModule } from './modules/departments/departments.module';
 import { SectionsModule } from './modules/sections/sections.module';
@@ -34,6 +35,7 @@ import { DocumentsModule } from './modules/documents/documents.module';
     }),
     PrismaModule,
     AuthModule,
+    StorageModule,
     DepartmentsModule,
     SectionsModule,
     DesignationsModule,

@@ -3,48 +3,42 @@ import {
   UseInterceptors, UploadedFile, BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { diskStorage } from 'multer';
-import { extname, join } from 'path';
 import { DocumentsService } from './documents.service';
+import { StorageService } from '../../common/services/storage.service';
 import { UploadDocumentDto } from './dto/document.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../../auth/guards/roles.guard';
 import { Roles } from '../../auth/decorators/roles.decorator';
 
-const documentStorage = diskStorage({
-  destination: join(process.cwd(), 'uploads', 'documents'),
-  filename: (_req, file, cb) => {
-    const unique = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, `doc-${unique}${extname(file.originalname)}`);
-  },
-});
-
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Controller('documents')
 export class DocumentsController {
-  constructor(private service: DocumentsService) {}
+  constructor(
+    private service: DocumentsService,
+    private storageService: StorageService,
+  ) {}
 
   @Get(':employeeId')
   findAllForEmployee(@Param('employeeId') employeeId: string) {
     return this.service.findAllForEmployee(employeeId);
   }
 
-  @Roles('ADMIN', 'SUPERVISOR')
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR')
   @Post('upload')
-  @UseInterceptors(FileInterceptor('file', { storage: documentStorage }))
+  @UseInterceptors(FileInterceptor('file'))
   async uploadDocument(
     @Body() dto: UploadDocumentDto,
-    @UploadedFile() file: Express.Multer.File,
+    @UploadedFile() file: any,
   ) {
     if (!file) {
       throw new BadRequestException('File is required');
     }
-    const fileUrl = `/uploads/documents/${file.filename}`;
-    const fileType = file.mimetype;
+    const fileUrl = await this.storageService.uploadFile(file, 'documents');
+    const fileType = file.mimetype || 'application/octet-stream';
     return this.service.create(dto.employeeId, dto.name, fileUrl, fileType);
   }
 
-  @Roles('ADMIN', 'SUPERVISOR')
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
   @Delete(':id')
   remove(@Param('id') id: string) {
     return this.service.remove(id);
