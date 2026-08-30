@@ -30,7 +30,7 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 
 # Install all dependencies only remvoce omit dev to install ts-node
-RUN npm ci
+RUN npm ci --include=dev
 
 # Copy Prisma schema and generate client for production
 COPY prisma ./prisma/
