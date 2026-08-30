@@ -39,6 +39,8 @@ RUN npx prisma generate
 # Copy compiled dist from builder stage
 COPY --from=builder /app/dist ./dist
 
+COPY --from=builder /app/tsconfig.json ./tsconfig.json
+
 # Create upload directories
 RUN mkdir -p uploads/photos uploads/documents
 
