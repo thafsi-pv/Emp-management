@@ -17,6 +17,7 @@ import { FinalSettlement } from './views/FinalSettlement';
 import { Reports } from './views/Reports';
 import { Settings } from './views/Settings';
 import { OrgMaster } from './views/OrgMaster';
+import { UserManagement } from './views/UserManagement';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -182,6 +183,15 @@ export const AppContent: React.FC = () => {
           element={
             <ProtectedRoute
               element={<OrgMaster />}
+              allowedRoles={['ADMIN']}
+            />
+          }
+        />
+        <Route
+          path="/users"
+          element={
+            <ProtectedRoute
+              element={<UserManagement />}
               allowedRoles={['ADMIN']}
             />
           }

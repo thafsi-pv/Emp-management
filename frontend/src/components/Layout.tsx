@@ -17,7 +17,8 @@ import {
   Moon,
   Briefcase,
   Calendar,
-  Building2
+  Building2,
+  UserCog
 } from 'lucide-react';
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -146,6 +147,13 @@ export const Layout: React.FC<LayoutProps> = ({ children, onLogout }) => {
       path: '/org-master',
       label: 'Dept & Designation',
       icon: Building2,
+      roles: ['ADMIN'],
+    },
+    {
+      id: 'userManagement',
+      path: '/users',
+      label: 'User Management',
+      icon: UserCog,
       roles: ['ADMIN'],
     },
     {

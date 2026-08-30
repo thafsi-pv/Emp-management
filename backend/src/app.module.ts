@@ -9,6 +9,7 @@ import { AuthModule } from './auth/auth.module';
 import { RolesGuard } from './auth/guards/roles.guard';
 import { StorageModule } from './common/services/storage.module';
 
+import { UsersModule } from './modules/users/users.module';
 import { DepartmentsModule } from './modules/departments/departments.module';
 import { SectionsModule } from './modules/sections/sections.module';
 import { DesignationsModule } from './modules/designations/designations.module';
@@ -36,6 +37,7 @@ import { DocumentsModule } from './modules/documents/documents.module';
     PrismaModule,
     AuthModule,
     StorageModule,
+    UsersModule,
     DepartmentsModule,
     SectionsModule,
     DesignationsModule,
