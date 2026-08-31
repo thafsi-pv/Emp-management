@@ -52,11 +52,12 @@ export class FinalSettlementService {
       include: { employee: true },
     });
 
-    // If all clearances completed, automatically set status to RESIGNED / TERMINATED if needed
+    // Preserve a termination status; otherwise a cleared settlement completes a resignation.
     if (updated.departmentClearance && updated.financeClearance && updated.hrClearance) {
+      const termination = await this.prisma.contractTermination.findFirst({ where: { employeeId } });
       await this.prisma.employee.update({
         where: { id: employeeId },
-        data: { status: 'RESIGNED' },
+        data: { status: termination ? 'TERMINATED' : 'RESIGNED' },
       });
     }
 

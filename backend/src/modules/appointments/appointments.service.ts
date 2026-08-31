@@ -38,6 +38,17 @@ export class AppointmentsService {
   }
 
   async create(dto: CreateAppointmentDto) {
+    const employee = await this.prisma.employee.findUnique({
+      where: { id: dto.employeeId },
+      include: { designation: true },
+    });
+    if (!employee) throw new NotFoundException('Employee not found');
+    // An appointment belongs to the employee's current posting and pay grade.
+    // Do not allow a manually entered order to diverge from the employee record.
+    const salary = employee.salary || employee.designation.basicPay;
+    const departmentId = employee.departmentId;
+    const sectionId = employee.sectionId;
+    const designationId = employee.designationId;
     const startDate = new Date(dto.startDate);
     let endDate: Date;
     let serviceBreakApplicable = dto.serviceBreakApplicable ?? false;
@@ -49,18 +60,21 @@ export class AppointmentsService {
     });
     const settingsMap = Object.fromEntries(settings.map(s => [s.key, parseInt(s.value, 10)]));
 
-    const duration89 = settingsMap['89_days_duration'] || 89;
-    const duration178 = settingsMap['178_days_duration'] || 178;
-    const durationOneYear = settingsMap['one_year_duration'] || 365;
+    const duration89 = settingsMap['89_days_duration'];
+    const duration178 = settingsMap['178_days_duration'];
+    const durationOneYear = settingsMap['one_year_duration'];
+    if (!duration89 || !duration178 || !durationOneYear) {
+      throw new BadRequestException('Appointment duration settings are incomplete');
+    }
 
     if (dto.contractType === 'DAYS_89') {
-      endDate = addDays(startDate, duration89 - 1);
+      endDate = addDays(startDate, duration89);
     } else if (dto.contractType === 'DAYS_178') {
-      endDate = addDays(startDate, duration178 - 1);
+      endDate = addDays(startDate, duration178);
       serviceBreakApplicable = true;
       breakDueDate = addDays(startDate, duration178);
     } else if (dto.contractType === 'ONE_YEAR') {
-      endDate = addDays(startDate, durationOneYear - 1);
+      endDate = addDays(startDate, durationOneYear);
     } else {
       if (!dto.endDate) throw new BadRequestException('End date is required for custom contract type');
       endDate = new Date(dto.endDate);
@@ -69,6 +83,9 @@ export class AppointmentsService {
     if (dto.contractType === 'EXTENSION' && dto.previousAppointmentId) {
       const prev = await this.prisma.appointment.findUnique({ where: { id: dto.previousAppointmentId } });
       if (!prev) throw new NotFoundException('Previous appointment for extension not found');
+      if (prev.employeeId !== dto.employeeId) {
+        throw new BadRequestException('Previous appointment must belong to the selected employee');
+      }
     }
 
     const orderNumber = dto.orderNumber || await this.generateOrderNumber();
@@ -82,10 +99,10 @@ export class AppointmentsService {
         contractType: dto.contractType as any,
         startDate,
         endDate,
-        salary: dto.salary,
-        designationId: dto.designationId,
-        departmentId: dto.departmentId,
-        sectionId: dto.sectionId ?? null,
+        salary,
+        designationId,
+        departmentId,
+        sectionId: sectionId ?? null,
         termsAndConditions: dto.termsAndConditions ?? 'Standard terms apply.',
         status: 'ACTIVE',
         joiningReportUrl: dto.joiningReportUrl ?? null,
@@ -103,10 +120,10 @@ export class AppointmentsService {
       where: { id: dto.employeeId },
       data: {
         appointmentType: dto.contractType as any,
-        departmentId: dto.departmentId,
-        sectionId: dto.sectionId ?? undefined,
-        designationId: dto.designationId,
-        salary: dto.salary,
+        departmentId,
+        sectionId: sectionId ?? undefined,
+        designationId,
+        salary,
         status: 'ACTIVE',
       },
     });

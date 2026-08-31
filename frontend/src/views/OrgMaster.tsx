@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/client';
 import { useAuth } from '../context/SimulatedAuthContext';
-import { Building2, Tag, Plus, Pencil, Trash2, ShieldAlert } from 'lucide-react';
+import { Building2, Tag, Plus, Pencil, Trash2, ShieldAlert, Layers } from 'lucide-react';
 
 // Shadcn Components
 import { Button } from '@/components/ui/button';
@@ -33,6 +33,7 @@ interface Designation {
   otRate: number;
   _count?: { employees: number };
 }
+interface Section { id: string; name: string; code: string; departmentId: string; department?: { name: string } }
 
 /* ─── Component ──────────────────────────────────────── */
 export const OrgMaster: React.FC = () => {
@@ -52,9 +53,20 @@ export const OrgMaster: React.FC = () => {
   return (
     <div className="flex flex-col gap-8">
       <DepartmentsPanel />
+      <SectionsPanel />
       <DesignationsPanel />
     </div>
   );
+};
+
+const SectionsPanel: React.FC = () => {
+  const qc = useQueryClient();
+  const [showForm, setShowForm] = useState(false); const [name, setName] = useState(''); const [code, setCode] = useState(''); const [departmentId, setDepartmentId] = useState(''); const [error, setError] = useState<string | null>(null);
+  const { data: sectionsRes } = useQuery({ queryKey: ['sections'], queryFn: () => apiClient.get('/api/sections').then((r) => r.data) });
+  const { data: departmentsRes } = useQuery({ queryKey: ['departments'], queryFn: () => apiClient.get('/api/departments').then((r) => r.data) });
+  const sections: Section[] = sectionsRes?.data || sectionsRes || []; const departments: Department[] = departmentsRes?.data || departmentsRes || [];
+  const create = useMutation({ mutationFn: () => apiClient.post('/api/sections', { name: name.trim(), code: code.trim().toUpperCase(), departmentId }), onSuccess: () => { qc.invalidateQueries({ queryKey: ['sections'] }); setShowForm(false); setName(''); setCode(''); setDepartmentId(''); }, onError: (e: any) => setError(e.response?.data?.message || 'Could not create section') });
+  return <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-4 border-b"><div className="flex items-center gap-3"><Layers className="text-primary" size={24} /><div><CardTitle className="text-lg">Sections</CardTitle><CardDescription>Create sections inside each department</CardDescription></div></div><Button onClick={() => setShowForm((value) => !value)}><Plus className="mr-2 h-4 w-4" />Add Section</Button></CardHeader>{showForm && <div className="p-6 bg-muted/30 border-b"><form onSubmit={(e) => { e.preventDefault(); create.mutate(); }} className="flex gap-4 items-end flex-wrap"><div className="space-y-2 min-w-[200px]"><Label>Department *</Label><Select value={departmentId} onValueChange={(value) => setDepartmentId(value || '')}><SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger><SelectContent>{departments.map((department) => <SelectItem key={department.id} value={department.id}>{department.name}</SelectItem>)}</SelectContent></Select></div><div className="space-y-2 flex-1 min-w-[180px]"><Label>Section Name *</Label><Input value={name} onChange={(e) => setName(e.target.value)} required placeholder="e.g. Field Team" /></div><div className="space-y-2 w-[140px]"><Label>Code *</Label><Input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} required placeholder="OPS-FIELD" /></div><Button type="submit" disabled={!departmentId || create.isPending}>{create.isPending ? 'Creating…' : 'Create'}</Button></form>{error && <p className="text-destructive text-sm mt-3">{error}</p>}</div>}<CardContent className="p-0"><Table><TableHeader><TableRow><TableHead>Section</TableHead><TableHead>Code</TableHead><TableHead>Department</TableHead></TableRow></TableHeader><TableBody>{sections.map((section) => <TableRow key={section.id}><TableCell className="font-medium">{section.name}</TableCell><TableCell><Badge variant="outline">{section.code}</Badge></TableCell><TableCell>{section.department?.name || departments.find((d) => d.id === section.departmentId)?.name || '—'}</TableCell></TableRow>)}{!sections.length && <TableRow><TableCell colSpan={3} className="text-center text-muted-foreground py-8">No sections yet. Create one above.</TableCell></TableRow>}</TableBody></Table></CardContent></Card>;
 };
 
 /* ══════════════════════════════════════════════════════

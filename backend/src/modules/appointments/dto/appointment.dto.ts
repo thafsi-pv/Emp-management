@@ -11,9 +11,10 @@ export class CreateAppointmentDto {
   @IsEnum(['DAYS_89', 'DAYS_178', 'ONE_YEAR', 'EXTENSION', 'THREE_MONTHS', 'SIX_MONTHS', 'CUSTOM']) contractType: string;
   @IsDateString() startDate: string;
   @IsOptional() @IsDateString() endDate?: string;
-  @Type(() => Number) @IsNumber() @IsPositive() salary: number;
-  @IsString() designationId: string;
-  @IsString() departmentId: string;
+  // Appointment details are inherited from the selected employee.
+  @IsOptional() @Type(() => Number) @IsNumber() @IsPositive() salary?: number;
+  @IsOptional() @IsString() designationId?: string;
+  @IsOptional() @IsString() departmentId?: string;
   @IsOptional() @IsString() sectionId?: string;
   @IsOptional() @IsString() termsAndConditions?: string;
   @IsOptional() @IsString() joiningReportUrl?: string;

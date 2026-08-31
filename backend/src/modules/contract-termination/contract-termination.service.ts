@@ -9,6 +9,7 @@ const INCLUDE = {
       id: true, name: true, code: true,
       department: { select: { id: true, name: true } },
       designation: { select: { id: true, name: true } },
+      separation: true,
     },
   },
 };
@@ -34,29 +35,36 @@ export class ContractTerminationService {
   }
 
   async create(dto: CreateContractTerminationDto) {
+    return this.createSeparation(dto, 'TERMINATED');
+  }
+
+  async createResignation(dto: CreateContractTerminationDto) {
+    return this.createSeparation(dto, 'RESIGNED');
+  }
+
+  async updateClearance(employeeId: string, dto: { clearanceDone?: boolean; idCardReturned?: boolean; propertyReturned?: boolean }) {
+    const separation = await this.prisma.separation.findUnique({ where: { employeeId } });
+    if (!separation) throw new NotFoundException('Separation not found');
+    const updated = await this.prisma.separation.update({ where: { employeeId }, data: dto });
+    return updated;
+  }
+
+  private async createSeparation(dto: CreateContractTerminationDto, status: 'TERMINATED' | 'RESIGNED') {
     const employee = await this.prisma.employee.findUnique({ where: { id: dto.employeeId } });
     if (!employee) throw new NotFoundException('Employee not found');
 
-    const termination = await this.prisma.contractTermination.create({
-      data: {
-        ...dto,
-        terminationDate: new Date(dto.terminationDate),
-      },
-      include: INCLUDE,
+    return this.prisma.$transaction(async (tx) => {
+      await tx.separation.upsert({
+        where: { employeeId: dto.employeeId },
+        update: { type: status === 'TERMINATED' ? 'TERMINATION' : 'RESIGNATION', reason: dto.reason, effectiveDate: new Date(dto.terminationDate) },
+        create: { employeeId: dto.employeeId, type: status === 'TERMINATED' ? 'TERMINATION' : 'RESIGNATION', reason: dto.reason, effectiveDate: new Date(dto.terminationDate) },
+      });
+      const termination = await tx.contractTermination.create({
+        data: { ...dto, terminationDate: new Date(dto.terminationDate) }, include: INCLUDE,
+      });
+      await tx.employee.update({ where: { id: dto.employeeId }, data: { status } });
+      await tx.appointment.updateMany({ where: { employeeId: dto.employeeId, status: 'ACTIVE' }, data: { status: 'TERMINATED' } });
+      return termination;
     });
-
-    // Update employee status to TERMINATED
-    await this.prisma.employee.update({
-      where: { id: dto.employeeId },
-      data: { status: 'TERMINATED' },
-    });
-
-    // Terminate all active appointments
-    await this.prisma.appointment.updateMany({
-      where: { employeeId: dto.employeeId, status: 'ACTIVE' },
-      data: { status: 'TERMINATED' },
-    });
-
-    return termination;
   }
 }

@@ -27,6 +27,9 @@ import {
   DollarSign,
   UserX,
   HandCoins,
+  Bell,
+  AlertTriangle,
+  Layers,
 } from 'lucide-react';
 
 const ROLE_LABELS: Record<UserRole, string> = {
@@ -150,6 +153,13 @@ const NAV_TREE: NavItem[] = [
         icon: HandCoins,
         roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER'],
       },
+      {
+        id: 'serviceBreaks',
+        path: '/service-breaks',
+        label: 'Service Break Due',
+        icon: AlertTriangle,
+        roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'MANAGEMENT'],
+      },
     ],
   },
   // Reports group
@@ -162,10 +172,20 @@ const NAV_TREE: NavItem[] = [
       {
         id: 'reports',
         path: '/reports',
-        label: 'All Reports',
+        label: 'Reports Hub',
         icon: FileText,
         roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT'],
       },
+      { id: 'reportEstablishment', path: '/reports/establishment', label: 'Establishment Register', icon: FileText, roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT'] },
+      { id: 'reportEmployees', path: '/reports/employees', label: 'Employee List', icon: Users, roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT'] },
+      { id: 'reportAttendance', path: '/reports/attendance', label: 'Attendance Report', icon: CalendarCheck, roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT'] },
+      { id: 'reportBreak', path: '/reports/service-break', label: 'Service Break Report', icon: AlertTriangle, roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT'] },
+      { id: 'reportAppointments', path: '/reports/appointments', label: 'Appointment Report', icon: Briefcase, roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT'] },
+      { id: 'reportExtensions', path: '/reports/extensions', label: 'Extension Report', icon: FileText, roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT'] },
+      { id: 'reportPay', path: '/reports/pay-structure', label: 'Pay Structure Report', icon: DollarSign, roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT'] },
+      { id: 'reportPayroll', path: '/reports/payroll', label: 'Payroll Report', icon: CreditCard, roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT'] },
+      { id: 'reportSeparation', path: '/reports/separation', label: 'Separation Report', icon: UserX, roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT'] },
+      { id: 'reportSettlement', path: '/reports/final-settlement', label: 'Final Settlement Report', icon: HandCoins, roles: ['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT'] },
     ],
   },
   // Employee self view
@@ -184,11 +204,17 @@ const NAV_TREE: NavItem[] = [
     roles: ['ADMIN'],
     children: [
       {
-        id: 'orgMaster',
-        path: '/org-master',
-        label: 'Dept & Designation',
+        id: 'departmentsMaster',
+        path: '/masters/departments',
+        label: 'Departments',
         icon: Building2,
         roles: ['ADMIN'],
+      },
+      {
+        id: 'sectionsMaster', path: '/masters/sections', label: 'Sections', icon: Layers, roles: ['ADMIN'],
+      },
+      {
+        id: 'designationsMaster', path: '/masters/designations', label: 'Designations', icon: BookOpen, roles: ['ADMIN'],
       },
       {
         id: 'userManagement',
@@ -490,6 +516,14 @@ export const Layout: React.FC<LayoutProps> = ({ children, onLogout }) => {
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <button
+              onClick={() => navigate('/alerts')}
+              className="btn btn-secondary"
+              title="Open Alert Center"
+              style={{ padding: 8, display: 'flex', alignItems: 'center' }}
+            >
+              <Bell size={16} />
+            </button>
             <button
               onClick={toggleTheme}
               className="btn btn-secondary"

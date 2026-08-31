@@ -5,6 +5,143 @@ import { PrismaService } from '../../prisma/prisma.service';
 export class ReportsService {
   constructor(private prisma: PrismaService) {}
 
+  catalog() {
+    return [
+      { type: 'establishment', name: 'Establishment Register', category: 'Establishment' },
+      { type: 'employees', name: 'Department-wise Employee List', category: 'Establishment' },
+      { type: 'attendance', name: 'Daily / Monthly Attendance', category: 'Attendance' },
+      { type: 'service-break', name: 'Service Break Report', category: 'Attendance' },
+      { type: 'appointments', name: 'Appointment Expiry Report', category: 'Appointments' },
+      { type: 'extensions', name: 'Extension / Renewal Report', category: 'Appointments' },
+      { type: 'pay-structure', name: 'Pay Structure Report', category: 'Payroll' },
+      { type: 'payroll', name: 'Monthly Payroll Register', category: 'Payroll' },
+      { type: 'separation', name: 'Resignation / Termination Report', category: 'Separation' },
+      { type: 'final-settlement', name: 'Final Settlement Report', category: 'Separation' },
+    ];
+  }
+
+  async getCatalogReport(type: string, params: { month?: string; year?: number; departmentId?: string }) {
+    switch (type) {
+      case 'establishment': return this.getEstablishmentRegister(params.departmentId);
+      case 'employees': return this.getEmployeeReport({ departmentId: params.departmentId });
+      case 'attendance': return this.getAttendanceReport({ month: params.month, year: params.year });
+      case 'service-break': return this.getServiceBreakAudit();
+      case 'pay-structure': return this.getPayStructureMatrix(params.departmentId);
+      case 'payroll': return this.getPayrollReport({ month: params.month, year: params.year, departmentId: params.departmentId });
+      case 'appointments': return this.getContractReport({ status: 'ACTIVE' });
+      case 'extensions': return this.prisma.appointment.findMany({
+        where: { contractType: 'EXTENSION' }, include: { employee: { select: { name: true, code: true } }, previousAppointment: true }, orderBy: { createdAt: 'desc' },
+      });
+      case 'separation': return this.prisma.contractTermination.findMany({
+        include: { employee: { select: { name: true, code: true, status: true } } }, orderBy: { terminationDate: 'desc' },
+      });
+      case 'final-settlement': return this.prisma.finalSettlement.findMany({
+        include: { employee: { select: { name: true, code: true, status: true } } }, orderBy: { settlementDate: 'desc' },
+      });
+      default: throw new Error(`Unknown report type: ${type}`);
+    }
+  }
+
+  async getEstablishmentRegister(departmentId?: string) {
+    const employees = await this.prisma.employee.findMany({
+      where: departmentId ? { departmentId } : undefined,
+      include: {
+        department: { select: { name: true } },
+        designation: { select: { name: true, payType: true, basicPay: true } },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    const today = new Date();
+    return {
+      data: employees.map((employee) => ({
+        ...employee,
+        employmentType: employee.designation.payType,
+        basicSalary: employee.salary || employee.designation.basicPay,
+        tenureMonths: Math.max(0, Math.floor(
+          (today.getFullYear() - employee.joiningDate.getFullYear()) * 12
+          + today.getMonth() - employee.joiningDate.getMonth(),
+        )),
+      })),
+    };
+  }
+
+  async getServiceBreakAudit() {
+    const [employees, settings] = await Promise.all([
+      this.prisma.employee.findMany({
+        include: {
+          appointments: {
+            where: { status: 'ACTIVE' },
+            orderBy: { startDate: 'desc' },
+            take: 1,
+            select: { breakDueDate: true },
+          },
+          serviceBreaks: { orderBy: { breakEndDate: 'desc' }, take: 1, select: { breakEndDate: true } },
+        },
+        orderBy: { name: 'asc' },
+      }),
+      this.prisma.systemSetting.findMany({
+        where: { key: { in: ['serviceBreakDays', 'appointment178Days'] } },
+      }),
+    ]);
+    const config = new Map(settings.map((setting) => [setting.key, Number(setting.value)]));
+    const breakThreshold = config.get('appointment178Days') || config.get('serviceBreakDays') || 178;
+    const today = new Date();
+
+    return {
+      data: employees.map((employee) => {
+        const latestBreak = employee.serviceBreaks[0]?.breakEndDate;
+        const activeFrom = latestBreak && latestBreak > employee.joiningDate ? latestBreak : employee.joiningDate;
+        const activeDays = Math.max(0, Math.floor((today.getTime() - activeFrom.getTime()) / 86_400_000));
+        return {
+          id: employee.id,
+          code: employee.code,
+          name: employee.name,
+          joiningDate: employee.joiningDate,
+          activeDays,
+          nextBreakDueDate: employee.appointments[0]?.breakDueDate?.toISOString() ?? null,
+          status: employee.status,
+          breakThreshold,
+        };
+      }),
+    };
+  }
+
+  async getPayStructureMatrix(departmentId?: string) {
+    const employees = await this.prisma.employee.findMany({
+      where: departmentId ? { departmentId } : undefined,
+      include: {
+        designation: { select: { payType: true, basicPay: true, allowance: true, weightage: true } },
+        payRevisions: {
+          where: { status: 'APPROVED', effectiveDate: { lte: new Date() } },
+          orderBy: { effectiveDate: 'desc' },
+          take: 1,
+          select: { newBasicPay: true, newAllowance: true, newWeightage: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+
+    return {
+      data: employees.map((employee) => {
+        const revision = employee.payRevisions[0];
+        const basicSalary = revision?.newBasicPay ?? employee.salary ?? employee.designation.basicPay;
+        const allowance = revision?.newAllowance ?? employee.designation.allowance;
+        const weightage = revision?.newWeightage ?? employee.designation.weightage;
+        return {
+          id: employee.id,
+          code: employee.code,
+          name: employee.name,
+          employmentType: employee.designation.payType,
+          basicSalary,
+          allowance,
+          weightage,
+          estimatedNetPay: basicSalary + allowance + weightage,
+        };
+      }),
+    };
+  }
+
   async getEmployeeReport(params: { departmentId?: string; designationId?: string; status?: string }) {
     const where: any = {};
     if (params.departmentId) where.departmentId = params.departmentId;

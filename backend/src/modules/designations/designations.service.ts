@@ -24,6 +24,18 @@ export class DesignationsService {
 
   async update(id: string, dto: UpdateDesignationDto) {
     await this.findOne(id);
+    if (dto.name || dto.code) {
+      const duplicate = await this.prisma.designation.findFirst({
+        where: {
+          id: { not: id },
+          OR: [
+            ...(dto.name ? [{ name: dto.name }] : []),
+            ...(dto.code ? [{ code: dto.code }] : []),
+          ],
+        },
+      });
+      if (duplicate) throw new ConflictException('Designation name or code already exists');
+    }
     return this.prisma.designation.update({ where: { id }, data: dto });
   }
 

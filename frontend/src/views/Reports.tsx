@@ -1,11 +1,25 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import apiClient from '../api/client';
 import { FileText, Download, Filter, BarChart3 } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 
 export const Reports: React.FC = () => {
+  const { type: routeType } = useParams<{ type?: string }>();
   const [activeTab, setActiveTab] = useState<'establishment' | 'serviceBreak' | 'payStructure'>('establishment');
   const [deptFilter, setDeptFilter] = useState('');
+  const [catalogType, setCatalogType] = useState(routeType || '');
+  useEffect(() => { if (routeType) setCatalogType(routeType); }, [routeType]);
+
+  const { data: catalog } = useQuery({
+    queryKey: ['reportCatalog'],
+    queryFn: async () => (await apiClient.get('/api/reports/catalog')).data as Array<{ type: string; name: string; category: string }>,
+  });
+  const { data: catalogResult, isLoading: catalogLoading } = useQuery({
+    queryKey: ['catalogReport', catalogType, deptFilter],
+    queryFn: async () => (await apiClient.get(`/api/reports/catalog/${catalogType}?departmentId=${deptFilter}`)).data,
+    enabled: !!catalogType,
+  });
 
   // Fetch departments for filtering
   const { data: deptRes } = useQuery({
@@ -66,8 +80,39 @@ export const Reports: React.FC = () => {
     document.body.removeChild(link);
   };
 
+  const handleExportPdf = async () => {
+    if (!catalogType) return;
+    const response = await apiClient.get(`/api/reports/catalog/${catalogType}/pdf?departmentId=${deptFilter}`, { responseType: 'blob' });
+    const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' }));
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `${catalogType}-report.pdf`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+  const catalogRows = Array.isArray(catalogResult) ? catalogResult : catalogResult?.data || catalogResult?.employees || catalogResult?.records || catalogResult?.payrolls || catalogResult?.appointments || [];
+  const reportColumns = catalogRows.length ? Object.keys(catalogRows[0]).filter((key) => typeof catalogRows[0][key] !== 'object').slice(0, 8) : [];
+
   return (
     <div style={styles.container}>
+      <div className="card" style={{ padding: 20 }}>
+        <h4 style={{ margin: '0 0 12px' }}>Report Catalogue</h4>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          {(catalog || []).map((report) => (
+            <button key={report.type} className={`btn ${catalogType === report.type ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setCatalogType(report.type)}>
+              {report.name}
+            </button>
+          ))}
+        </div>
+        {catalogType && (
+          <div style={{ marginTop: 16 }}>
+            <div className="flex-between"><span style={{ color: 'var(--text-secondary)', fontSize: 13 }}>Report data table.</span><div style={{ display: 'flex', gap: 8 }}><button className="btn btn-secondary" onClick={() => handleExportCSV(catalogRows, `${catalogType}_report`)}><Download size={14} /> CSV</button><button className="btn btn-secondary" onClick={handleExportPdf}><Download size={14} /> PDF</button></div></div>
+            {catalogLoading ? <p>Loading report…</p> : <div className="table-container" style={{ marginTop: 12 }}><table className="data-table"><thead><tr>{reportColumns.map((column) => <th key={column}>{column.replace(/([A-Z])/g, ' $1')}</th>)}</tr></thead><tbody>{catalogRows.map((row: any, index: number) => <tr key={row.id || index}>{reportColumns.map((column) => <td key={column}>{String(row[column] ?? '—')}</td>)}</tr>)}{!catalogRows.length && <tr><td colSpan={Math.max(reportColumns.length, 1)} style={{ textAlign: 'center', padding: 20 }}>No records found.</td></tr>}</tbody></table></div>}
+          </div>
+        )}
+      </div>
       {/* Header Tabs */}
       <div className="card flex-between" style={{ padding: '16px 24px' }}>
         <div style={{ display: 'flex', gap: '8px' }}>

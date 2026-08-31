@@ -10,6 +10,7 @@ interface AttendanceRecord {
   date: string;
   status: StatusType;
   approvalStatus: 'PENDING' | 'APPROVED' | 'REJECTED';
+  otHours?: number;
   employee: {
     id: string;
     name: string;
@@ -36,6 +37,7 @@ export const Attendance: React.FC = () => {
   // State for bulk marking
   const [markedStatuses, setMarkedStatuses] = useState<Record<string, StatusType>>({});
   const [markedRemarks, setMarkedRemarks] = useState<Record<string, string>>({});
+  const [markedOtHours, setMarkedOtHours] = useState<Record<string, string>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitSuccess, setSubmitSuccess] = useState(false);
 
@@ -114,6 +116,7 @@ export const Attendance: React.FC = () => {
       date: selectedDate,
       status: markedStatuses[emp.id] || 'PRESENT',
       remarks: markedRemarks[emp.id] || '',
+      otHours: Number(markedOtHours[emp.id]) || 0,
     }));
 
     bulkSubmitMutation.mutate(records);
@@ -169,6 +172,7 @@ export const Attendance: React.FC = () => {
                       <th>Employee</th>
                       <th>Department</th>
                       <th>Attendance Status</th>
+                      <th>OT Hours</th>
                       <th>Remarks</th>
                     </tr>
                   </thead>
@@ -203,6 +207,9 @@ export const Attendance: React.FC = () => {
                                 </label>
                               ))}
                             </div>
+                          </td>
+                          <td>
+                            <input type="number" min="0" step="0.25" className="form-input" placeholder="0" value={markedOtHours[emp.id] || ''} onChange={(e) => setMarkedOtHours((prev) => ({ ...prev, [emp.id]: e.target.value }))} style={{ width: '80px', padding: '6px 10px', fontSize: '13px' }} />
                           </td>
                           <td>
                             <input

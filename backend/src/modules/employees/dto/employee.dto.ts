@@ -25,7 +25,8 @@ export class CreateEmployeeDto {
   @IsOptional() @IsString() sectionId?: string;
   @IsOptional() @IsString() supervisorId?: string;
   @IsString() designationId: string;
-  @Type(() => Number) @IsNumber() @IsPositive() salary: number;
+  // Defaults to the selected designation's basic pay; retained for imports.
+  @IsOptional() @Type(() => Number) @IsNumber() @IsPositive() salary?: number;
   @IsDateString() joiningDate: string;
   @IsOptional() @IsEnum(['ACTIVE', 'INACTIVE', 'LEAVE', 'OFF', 'SERVICE_BREAK', 'EXPIRED', 'RESIGNED', 'TERMINATED']) status?: string;
 }

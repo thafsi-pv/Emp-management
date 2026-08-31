@@ -26,6 +26,9 @@ export class AttendanceService {
     if (user && user.role === 'SUPERVISOR' && user.employeeId) {
       where.employee = { supervisorId: user.employeeId };
     }
+    if (user && user.role === 'EMPLOYEE' && user.employeeId) {
+      where.employeeId = user.employeeId;
+    }
 
     if (date) {
       const d = new Date(date);

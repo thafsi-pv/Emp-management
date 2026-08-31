@@ -1,5 +1,6 @@
 import React from 'react';
 import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface FormSelectProps {
   label: string;
@@ -25,22 +26,18 @@ export const FormSelect: React.FC<FormSelectProps> = ({
   return (
     <div className={`space-y-2 ${className || ''}`}>
       <Label>{label}</Label>
-      <select
+      <Select
         value={value}
-        onChange={(e) => onValueChange(e.target.value)}
+        onValueChange={(nextValue) => { if (nextValue) onValueChange(nextValue); }}
         disabled={disabled}
-        className={`flex h-10 w-full rounded-lg border bg-background px-3 py-2 text-sm text-foreground outline-none transition-colors
-          focus-visible:border-ring focus-visible:ring-2 focus-visible:ring-ring/30
-          disabled:cursor-not-allowed disabled:opacity-50
-          ${error ? 'border-destructive' : 'border-input'}`}
       >
-        <option value="" disabled hidden>{placeholder}</option>
-        {options.map((opt) => (
-          <option key={opt.value} value={opt.value}>
-            {opt.label}
-          </option>
-        ))}
-      </select>
+        <SelectTrigger className={`w-full ${error ? 'border-destructive' : ''}`}>
+          <SelectValue placeholder={placeholder} />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map((opt) => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+        </SelectContent>
+      </Select>
       {error && <span className="text-xs text-destructive">{error}</span>}
     </div>
   );

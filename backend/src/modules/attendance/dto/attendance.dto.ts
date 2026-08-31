@@ -1,4 +1,4 @@
-import { IsString, IsEnum, IsDateString, IsOptional, IsBoolean } from 'class-validator';
+import { IsString, IsEnum, IsDateString, IsOptional, IsBoolean, IsNumber, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class CreateAttendanceDto {
@@ -6,6 +6,7 @@ export class CreateAttendanceDto {
   @IsDateString() date: string;
   @IsEnum(['PRESENT', 'ABSENT', 'HALF_DAY', 'LEAVE', 'OFF', 'OD', 'HOLIDAY', 'SERVICE_BREAK']) status: any;
   @IsOptional() @IsString() remarks?: string;
+  @IsOptional() @Type(() => Number) @IsNumber() @Min(0) otHours?: number;
   @IsOptional() @IsBoolean() override?: boolean;
 }
 

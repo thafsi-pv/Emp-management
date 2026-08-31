@@ -81,6 +81,17 @@ enum PayrollStatus {
   PAID
 }
 
+enum ServiceBreakStatus {
+  PENDING
+  ACTIVE
+  COMPLETED
+}
+
+enum SeparationType {
+  RESIGNATION
+  TERMINATION
+}
+
 enum PayType {
   DAILY
   MONTHLY
@@ -113,6 +124,14 @@ enum DocumentCategory {
   TERMINATION
   FINAL_SETTLEMENT
   OTHER
+}
+
+enum AlertType {
+  APPOINTMENT_EXPIRY
+  SERVICE_BREAK_DUE
+  PENDING_LEAVE
+  PENDING_PAYROLL
+  UNMARKED_ATTENDANCE
 }
 
 model User {
@@ -209,12 +228,16 @@ model Employee {
   appointments     Appointment[]
   attendances      Attendance[]
   payrolls         Payroll[]
+  payrollEntries   PayrollEntry[]
   serviceBreaks    ServiceBreak[]
   terminations     ContractTermination[]
   documents        EmployeeDocument[]
   payRevisions     PayRevision[]
   finalSettlement  FinalSettlement?
   leaves           Leave[]
+  leaveBalance     LeaveBalance?
+  alerts           AlertQueue[]
+  separation       Separation?
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
@@ -248,6 +271,7 @@ model Appointment {
   serviceBreakApplicable Boolean           @default(false)
   breakDueDate           DateTime?
   renewals               ContractRenewal[]
+  serviceBreak           ServiceBreak?
   createdAt              DateTime          @default(now())
   updatedAt              DateTime          @updatedAt
 
@@ -265,6 +289,7 @@ model Attendance {
   establishmentVerified Boolean          @default(false)
   verifiedById          String?
   remarks               String?
+  otHours               Float            @default(0)
   createdAt             DateTime         @default(now())
   updatedAt             DateTime         @updatedAt
 
@@ -291,6 +316,19 @@ model Leave {
   @@map("leaves")
 }
 
+model LeaveBalance {
+  id         String   @id @default(uuid())
+  employeeId String   @unique
+  employee   Employee @relation(fields: [employeeId], references: [id])
+  paidOff    Int      @default(0)
+  festival   Int      @default(0)
+  other      Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("leave_balances")
+}
+
 model Payroll {
   id               String        @id @default(uuid())
   employeeId       String
@@ -312,6 +350,44 @@ model Payroll {
 
   @@unique([employeeId, month, year])
   @@map("payroll")
+}
+
+model PayrollRun {
+  id        String        @id @default(uuid())
+  month     Int
+  year      Int
+  status    PayrollStatus @default(DRAFT)
+  entries   PayrollEntry[]
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  @@unique([month, year])
+  @@map("payroll_runs")
+}
+
+model PayrollEntry {
+  id                String     @id @default(uuid())
+  payrollRunId      String
+  payrollRun        PayrollRun @relation(fields: [payrollRunId], references: [id], onDelete: Cascade)
+  employeeId        String
+  employee          Employee   @relation(fields: [employeeId], references: [id])
+  basicPay          Float
+  weightage         Float      @default(0)
+  presentDays       Float      @default(0)
+  paidOffDays       Float      @default(0)
+  leaveDays         Float      @default(0)
+  absentDays        Float      @default(0)
+  serviceBreakDays  Float      @default(0)
+  overtime          Float      @default(0)
+  allowance         Float      @default(0)
+  deduction         Float      @default(0)
+  advance           Float      @default(0)
+  netPay            Float
+  createdAt         DateTime   @default(now())
+  updatedAt         DateTime   @updatedAt
+
+  @@unique([payrollRunId, employeeId])
+  @@map("payroll_entries")
 }
 
 model PayStructure {
@@ -356,6 +432,12 @@ model ServiceBreak {
   id             String    @id @default(uuid())
   employeeId     String
   employee       Employee  @relation(fields: [employeeId], references: [id])
+  appointmentId  String?   @unique
+  appointment    Appointment? @relation(fields: [appointmentId], references: [id])
+  applicable     Boolean   @default(false)
+  day178Date     DateTime?
+  breakDueDate   DateTime?
+  status         ServiceBreakStatus @default(PENDING)
   orderNumber    String?
   orderDate      DateTime?
   breakStartDate DateTime
@@ -404,6 +486,24 @@ model ContractTermination {
   @@map("contract_terminations")
 }
 
+model Separation {
+  id               String         @id @default(uuid())
+  employeeId       String         @unique
+  employee         Employee       @relation(fields: [employeeId], references: [id])
+  type             SeparationType
+  reason           String
+  effectiveDate    DateTime
+  noticePeriod     Int?
+  clearanceDone    Boolean        @default(false)
+  idCardReturned   Boolean        @default(false)
+  propertyReturned Boolean        @default(false)
+  orderPdfUrl      String?
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  @@map("separations")
+}
+
 model FinalSettlement {
   id                  String   @id @default(uuid())
   employeeId          String   @unique
@@ -434,6 +534,22 @@ model SystemSetting {
   updatedAt   DateTime @updatedAt
 
   @@map("system_settings")
+}
+
+model AlertQueue {
+  id            String    @id @default(uuid())
+  alertType     AlertType
+  employeeId    String?
+  employee      Employee? @relation(fields: [employeeId], references: [id])
+  dueDate       DateTime
+  daysBefore    Int
+  recipientRole String
+  sentAt        DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@unique([alertType, employeeId, dueDate, daysBefore, recipientRole])
+  @@index([recipientRole, sentAt])
+  @@map("alert_queue")
 }
 
 model EmployeeDocument {

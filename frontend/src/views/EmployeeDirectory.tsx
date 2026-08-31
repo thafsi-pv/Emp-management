@@ -55,8 +55,9 @@ export const EmployeeDirectory: React.FC<{ onSelectEmployee?: (id: string) => vo
   const [gender, setGender] = useState('MALE');
   const [dob, setDob] = useState('');
   const [joiningDate, setJoiningDate] = useState('');
-  const [salary, setSalary] = useState('');
   const [departmentId, setDepartmentId] = useState('');
+  const [sectionId, setSectionId] = useState('');
+  const [supervisorId, setSupervisorId] = useState('');
   const [designationId, setDesignationId] = useState('');
   const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
@@ -90,6 +91,12 @@ export const EmployeeDirectory: React.FC<{ onSelectEmployee?: (id: string) => vo
       return res.data;
     },
   });
+  const { data: sections } = useQuery({ queryKey: ['sections', departmentId], queryFn: async () => (await apiClient.get(`/api/sections${departmentId ? `?departmentId=${departmentId}` : ''}`)).data, enabled: !!departmentId });
+  const { data: supervisors } = useQuery({ queryKey: ['supervisorOptions'], queryFn: async () => {
+    try { return (await apiClient.get('/api/users/supervisors')).data; }
+    catch { return (await apiClient.get('/api/users')).data.filter((user: any) => user.role === 'SUPERVISOR' && user.employee); }
+  } });
+  const supervisorOptions = Array.isArray(supervisors) ? supervisors : supervisors?.data || [];
 
   const createMutation = useMutation({
     mutationFn: async (formData: FormData) => {
@@ -111,7 +118,7 @@ export const EmployeeDirectory: React.FC<{ onSelectEmployee?: (id: string) => vo
   const resetForm = () => {
     setName(''); setEmail(''); setPhone(''); setAddress('');
     setGender('MALE'); setDob(''); setJoiningDate('');
-    setSalary(''); setDepartmentId(''); setDesignationId('');
+    setDepartmentId(''); setSectionId(''); setSupervisorId(''); setDesignationId('');
     setPhotoFile(null); setFormError(null);
   };
 
@@ -129,8 +136,9 @@ export const EmployeeDirectory: React.FC<{ onSelectEmployee?: (id: string) => vo
     formData.append('gender', gender);
     formData.append('dateOfBirth', dob);
     formData.append('joiningDate', joiningDate);
-    formData.append('salary', salary);
     formData.append('departmentId', departmentId);
+    if (sectionId) formData.append('sectionId', sectionId);
+    if (supervisorId) formData.append('supervisorId', supervisorId);
     formData.append('designationId', designationId);
     if (photoFile) formData.append('photo', photoFile);
     createMutation.mutate(formData);
@@ -469,9 +477,28 @@ export const EmployeeDirectory: React.FC<{ onSelectEmployee?: (id: string) => vo
               <FormSelect
                 label="Department *"
                 value={departmentId}
-                onValueChange={setDepartmentId}
+                onValueChange={(value) => { setDepartmentId(value); setSectionId(''); }}
                 options={departments?.map((d: any) => ({ label: d.name, value: d.id })) || []}
                 placeholder="Select Department"
+              />
+
+              <FormSelect
+                label="Section"
+                value={sectionId}
+                onValueChange={setSectionId}
+                options={(sections?.data || sections || []).map((s: any) => ({ label: s.name, value: s.id }))}
+                placeholder={departmentId ? 'Select Section' : 'Select Department first'}
+              />
+
+              <FormSelect
+                label="Reporting Supervisor"
+                value={supervisorId}
+                onValueChange={setSupervisorId}
+                options={supervisorOptions.map((item: any) => {
+                  const employee = item.employee || item;
+                  return { label: `${employee.name} (${employee.code})`, value: employee.id };
+                })}
+                placeholder="Select Supervisor (optional)"
               />
 
               <FormSelect
@@ -482,14 +509,12 @@ export const EmployeeDirectory: React.FC<{ onSelectEmployee?: (id: string) => vo
                 placeholder="Select Designation"
               />
 
-              <FormInput
-                label="Basic Salary (₹) *"
-                type="number"
-                placeholder="Monthly salary"
-                value={salary}
-                onChange={(e) => setSalary(e.target.value)}
-                required
-              />
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Basic Pay</label>
+                <div className="h-10 rounded-md border bg-muted/40 px-3 flex items-center text-sm">
+                  {designationId ? `₹ ${designations?.find((d: any) => d.id === designationId)?.basicPay ?? 0} — taken from the selected designation` : 'Select a designation first'}
+                </div>
+              </div>
 
               <FormDatePicker
                 label="Joining Date"

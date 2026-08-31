@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/client';
 import { Briefcase, Plus, Printer, Download, Link2 } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/ui/select';
 
 interface AppointmentRecord {
   id: string;
@@ -28,13 +29,9 @@ export const Appointments: React.FC = () => {
   const [employeeId, setEmployeeId] = useState('');
   const [orderNumber, setOrderNumber] = useState('');
   const [orderDate, setOrderDate] = useState(new Date().toISOString().split('T')[0]);
-  const [contractType, setContractType] = useState<string>('DAYS_89');
+  const [contractType, setContractType] = useState<string>('');
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [endDate, setEndDate] = useState('');
-  const [salary, setSalary] = useState('');
-  const [departmentId, setDepartmentId] = useState('');
-  const [sectionId, setSectionId] = useState('');
-  const [designationId, setDesignationId] = useState('');
   const [previousAppointmentId, setPreviousAppointmentId] = useState('');
   const [terms, setTerms] = useState('Standard employment contract terms applied.');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -57,9 +54,7 @@ export const Appointments: React.FC = () => {
     },
   });
 
-  // Fetch departments, sections & designations
-  const { data: deptRes } = useQuery({ queryKey: ['departments'], queryFn: async () => (await apiClient.get('/api/departments')).data });
-  const { data: desigRes } = useQuery({ queryKey: ['designations'], queryFn: async () => (await apiClient.get('/api/designations')).data });
+  const { data: settingsRes } = useQuery({ queryKey: ['systemSettings'], queryFn: async () => (await apiClient.get('/api/settings')).data });
 
   // Automatic End Date Calculator
   const handleTypeOrDateChange = (type: string, start: string) => {
@@ -67,13 +62,18 @@ export const Appointments: React.FC = () => {
     const sDate = new Date(start);
     const computed = new Date(start);
 
-    if (type === 'DAYS_89' || type === 'THREE_MONTHS') {
-      computed.setDate(sDate.getDate() + 88);
-    } else if (type === 'DAYS_178' || type === 'SIX_MONTHS') {
-      computed.setDate(sDate.getDate() + 177);
-    } else if (type === 'ONE_YEAR') {
-      computed.setDate(sDate.getDate() + 364);
+    const settings = Array.isArray(settingsRes) ? settingsRes : settingsRes?.data || [];
+    const values = new Map<string, number>(settings.map((setting: { key: string; value: string }) => [setting.key, Number(setting.value)]));
+    const duration = type === 'DAYS_89' || type === 'THREE_MONTHS'
+      ? values.get('89_days_duration')
+      : type === 'DAYS_178' || type === 'SIX_MONTHS'
+        ? values.get('178_days_duration')
+        : type === 'ONE_YEAR' ? values.get('one_year_duration') : undefined;
+    if (!duration) {
+      setEndDate('');
+      return;
     }
+    computed.setDate(sDate.getDate() + duration);
     setEndDate(computed.toISOString().split('T')[0]);
   };
 
@@ -139,10 +139,6 @@ export const Appointments: React.FC = () => {
     setContractType('DAYS_89');
     setStartDate(new Date().toISOString().split('T')[0]);
     setEndDate('');
-    setSalary('');
-    setDepartmentId('');
-    setSectionId('');
-    setDesignationId('');
     setPreviousAppointmentId('');
     setErrorMsg(null);
   };
@@ -156,10 +152,6 @@ export const Appointments: React.FC = () => {
       contractType,
       startDate,
       endDate,
-      salary: parseFloat(salary),
-      departmentId,
-      sectionId: sectionId || undefined,
-      designationId,
       previousAppointmentId: previousAppointmentId || undefined,
       termsAndConditions: terms,
     });
@@ -167,11 +159,16 @@ export const Appointments: React.FC = () => {
 
   const appointments: AppointmentRecord[] = appointmentsRes?.data || [];
   const employees = employeesRes?.data || [];
-  const departments = deptRes?.data || [];
-  const designations = desigRes?.data || [];
 
   // Filter previous appointments for selected employee
   const selectedEmployeeAppointments = appointments.filter(a => a.employee?.id === employeeId);
+  const selectedEmployee = employees.find((employee: any) => employee.id === employeeId);
+  const selectEmployee = (value: string) => {
+    const employee = employees.find((item: any) => item.id === value);
+    setEmployeeId(value);
+    setPreviousAppointmentId('');
+    if (!employee) return;
+  };
 
   return (
     <div style={styles.container}>
@@ -268,12 +265,21 @@ export const Appointments: React.FC = () => {
             <form onSubmit={handleSubmit} style={styles.form}>
               <div className="form-group">
                 <label className="form-label">Employee *</label>
-                <select className="form-select" value={employeeId} onChange={(e) => setEmployeeId(e.target.value)} required>
-                  <option value="">-- Select Employee --</option>
-                  {employees.map((emp: any) => (
-                    <option key={emp.id} value={emp.id}>{emp.name} ({emp.code})</option>
-                  ))}
-                </select>
+                <Select
+                  value={employeeId}
+                  onValueChange={(value) => selectEmployee(value ?? '')}
+                  required
+                  items={employees.map((emp: any) => ({ value: emp.id, label: `${emp.name} (${emp.code})` }))}
+                >
+                  <SelectTrigger className="w-full">
+                    <SelectValue placeholder="-- Select Employee --" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {employees.map((emp: any) => (
+                      <SelectItem key={emp.id} value={emp.id}>{emp.name} ({emp.code})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>
@@ -287,33 +293,57 @@ export const Appointments: React.FC = () => {
                 </div>
                 <div className="form-group">
                   <label className="form-label">Contract Type *</label>
-                  <select
-                    className="form-select"
+                  <Select
                     value={contractType}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setContractType(val);
-                      handleTypeOrDateChange(val, startDate);
+                    onValueChange={(val) => {
+                      const contractValue = val ?? '';
+                      setContractType(contractValue);
+                      handleTypeOrDateChange(contractValue, startDate);
                     }}
+                    required
+                    items={[
+                      { value: "DAYS_89", label: "89 Days Appointment" },
+                      { value: "DAYS_178", label: "178 Days Appointment" },
+                      { value: "ONE_YEAR", label: "One Year Appointment" },
+                      { value: "EXTENSION", label: "Extension Order (Links Previous)" },
+                      { value: "CUSTOM", label: "Custom Duration" },
+                    ]}
                   >
-                    <option value="DAYS_89">89 Days Appointment</option>
-                    <option value="DAYS_178">178 Days Appointment</option>
-                    <option value="ONE_YEAR">One Year Appointment</option>
-                    <option value="EXTENSION">Extension Order (Links Previous)</option>
-                    <option value="CUSTOM">Custom Duration</option>
-                  </select>
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="-- Select Type --" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="DAYS_89">89 Days Appointment</SelectItem>
+                      <SelectItem value="DAYS_178">178 Days Appointment</SelectItem>
+                      <SelectItem value="ONE_YEAR">One Year Appointment</SelectItem>
+                      <SelectItem value="EXTENSION">Extension Order (Links Previous)</SelectItem>
+                      <SelectItem value="CUSTOM">Custom Duration</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
               {contractType === 'EXTENSION' && (
                 <div className="form-group" style={{ backgroundColor: 'rgba(59,130,246,0.1)', padding: '12px', borderRadius: '8px' }}>
                   <label className="form-label">Link Previous Appointment *</label>
-                  <select className="form-select" value={previousAppointmentId} onChange={(e) => setPreviousAppointmentId(e.target.value)} required>
-                    <option value="">-- Select Previous Appointment --</option>
-                    {selectedEmployeeAppointments.map((a) => (
-                      <option key={a.id} value={a.id}>{a.orderNumber} ({a.contractType} - Ended {a.endDate.split('T')[0]})</option>
-                    ))}
-                  </select>
+                  <Select
+                    value={previousAppointmentId}
+                    onValueChange={(value) => setPreviousAppointmentId(value ?? '')}
+                    required
+                    items={selectedEmployeeAppointments.map((a) => ({
+                      value: a.id,
+                      label: `${a.orderNumber} (${a.contractType} - Ended ${a.endDate.split('T')[0]})`
+                    }))}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue placeholder="-- Select Previous Appointment --" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {selectedEmployeeAppointments.map((a) => (
+                        <SelectItem key={a.id} value={a.id}>{a.orderNumber} ({a.contractType} - Ended {a.endDate.split('T')[0]})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               )}
 
@@ -337,28 +367,14 @@ export const Appointments: React.FC = () => {
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label">Department *</label>
-                  <select className="form-select" value={departmentId} onChange={(e) => setDepartmentId(e.target.value)} required>
-                    <option value="">-- Select --</option>
-                    {departments.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label">Designation *</label>
-                  <select className="form-select" value={designationId} onChange={(e) => setDesignationId(e.target.value)} required>
-                    <option value="">-- Select --</option>
-                    {designations.map((d: any) => <option key={d.id} value={d.id}>{d.name}</option>)}
-                  </select>
+              <div className="form-group">
+                <label className="form-label">Employee Posting & Pay</label>
+                <div className="form-input" style={{ minHeight: '42px', display: 'flex', alignItems: 'center' }}>
+                  {selectedEmployee ? `${selectedEmployee.department?.name || '—'} / ${selectedEmployee.section?.name || 'No section'} / ${selectedEmployee.designation?.name || '—'} — ₹ ${selectedEmployee.salary ?? selectedEmployee.designation?.basicPay ?? 0}` : 'Select an employee to automatically use their department, section, designation and basic pay.'}
                 </div>
               </div>
 
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-                <div className="form-group">
-                  <label className="form-label">Basic Salary (₹) *</label>
-                  <input type="number" step="0.01" className="form-input" value={salary} onChange={(e) => setSalary(e.target.value)} required />
-                </div>
                 <div className="form-group">
                   <label className="form-label">Terms & Order Details</label>
                   <input type="text" className="form-input" value={terms} onChange={(e) => setTerms(e.target.value)} />
@@ -385,7 +401,7 @@ const styles: Record<string, React.CSSProperties> = {
   spinner: { width: '32px', height: '32px', border: '3px solid rgba(255,255,255,0.05)', borderTopColor: 'var(--accent-secondary)', borderRadius: '50%', animation: 'spin 1s linear infinite' },
   empty: { display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '80px 24px', textAlign: 'center' },
   modalBackdrop: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999 },
-  modalContent: { width: '92%', maxWidth: '960px', maxHeight: '90vh', overflowY: 'auto', padding: '28px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)' },
+  modalContent: { width: '98%', maxWidth: '1400px', height: '94vh', overflowY: 'auto', padding: '32px', backgroundColor: 'var(--bg-card)', border: '1px solid var(--border-color)', borderRadius: '16px', boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)', display: 'flex', flexDirection: 'column' },
   errorBox: { backgroundColor: 'var(--color-danger-bg)', color: 'var(--color-danger)', padding: '12px 16px', borderRadius: 'var(--radius-sm)', fontSize: '13px', marginBottom: '16px' },
   form: { display: 'flex', flexDirection: 'column', gap: '16px' },
 };

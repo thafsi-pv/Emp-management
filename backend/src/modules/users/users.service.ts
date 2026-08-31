@@ -25,6 +25,14 @@ export class UsersService {
     });
   }
 
+  async findSupervisors() {
+    return this.prisma.user.findMany({
+      where: { role: 'SUPERVISOR', employeeId: { not: null } },
+      select: { employee: { select: { id: true, name: true, code: true, department: { select: { name: true } } } } },
+      orderBy: { name: 'asc' },
+    }).then((users) => users.map((user) => user.employee).filter(Boolean));
+  }
+
   async findOne(id: string) {
     const user = await this.prisma.user.findUnique({
       where: { id },

@@ -8,7 +8,7 @@ import { paginate } from '../../common/dto/pagination.dto';
 const EMPLOYEE_INCLUDE = {
   department: { select: { id: true, name: true, code: true } },
   section: { select: { id: true, name: true, code: true } },
-  designation: { select: { id: true, name: true, code: true } },
+  designation: { select: { id: true, name: true, code: true, payType: true, basicPay: true, weightage: true, allowance: true, otRate: true } },
   supervisor: { select: { id: true, name: true, code: true } },
 };
 
@@ -66,6 +66,44 @@ export class EmployeesService {
     });
     if (!employee) throw new NotFoundException('Employee not found');
     return employee;
+  }
+
+  async findOneForUser(id: string, user: any) {
+    const employee = await this.findOne(id);
+    this.assertCanView(employee, user);
+    return employee;
+  }
+
+  async getPayStructureForUser(id: string, user: any) {
+    const employee = await this.findOne(id);
+    this.assertCanView(employee, user);
+    const [versions, revisions] = await Promise.all([
+      this.prisma.payStructure.findMany({
+        where: { designationId: employee.designationId, effectiveFrom: { lte: new Date() } },
+        orderBy: { effectiveFrom: 'desc' },
+      }),
+      this.prisma.payRevision.findMany({
+        where: { employeeId: id },
+        orderBy: { effectiveDate: 'asc' },
+      }),
+    ]);
+    const version = versions[0];
+    const approvedRevision = revisions.filter((revision) => revision.status === 'APPROVED').at(-1);
+    const current = {
+      basicPay: approvedRevision?.newBasicPay ?? version?.basicPay ?? employee.designation.basicPay ?? employee.salary,
+      weightage: approvedRevision?.newWeightage ?? version?.weightage ?? employee.designation.weightage ?? 0,
+      allowance: approvedRevision?.newAllowance ?? version?.allowance ?? employee.designation.allowance ?? 0,
+      otRate: version?.otRate ?? employee.designation.otRate ?? 0,
+      payType: version?.payType ?? employee.designation.payType,
+      effectiveFrom: approvedRevision?.effectiveDate ?? version?.effectiveFrom ?? employee.joiningDate,
+    };
+    return { employeeId: employee.id, designation: employee.designation, current, payHistory: [...versions].reverse(), revisions };
+  }
+
+  async getServiceHistoryForUser(id: string, user: any) {
+    const employee = await this.findOne(id);
+    this.assertCanView(employee, user);
+    return this.getServiceHistory(id);
   }
 
   async getServiceHistory(id: string) {
@@ -182,10 +220,14 @@ export class EmployeesService {
     });
     if (existing) throw new ConflictException('Employee with this email or code already exists');
 
+    const designation = await this.prisma.designation.findUnique({ where: { id: dto.designationId } });
+    if (!designation) throw new NotFoundException('Designation not found');
+
     return this.prisma.employee.create({
       data: {
         ...dto,
         code: finalCode,
+        salary: dto.salary ?? designation.basicPay,
         photo: photoPath ?? dto.photo ?? null,
         appointmentType: dto.appointmentType as any,
         dateOfBirth: new Date(dto.dateOfBirth),
@@ -207,6 +249,11 @@ export class EmployeesService {
     }
 
     const data: any = { ...dto };
+    if (dto.designationId && dto.salary === undefined) {
+      const designation = await this.prisma.designation.findUnique({ where: { id: dto.designationId } });
+      if (!designation) throw new NotFoundException('Designation not found');
+      data.salary = designation.basicPay;
+    }
     if (dto.dateOfBirth) data.dateOfBirth = new Date(dto.dateOfBirth);
     if (dto.joiningDate) data.joiningDate = new Date(dto.joiningDate);
     if (photoPath) data.photo = photoPath;
@@ -234,5 +281,14 @@ export class EmployeesService {
       this.prisma.employee.count({ where: { status: 'TERMINATED' } }),
     ]);
     return { total, active, leave, off, serviceBreak, expired, resigned, terminated };
+  }
+
+  private assertCanView(employee: any, user: any) {
+    if (user?.role === 'EMPLOYEE' && user.employeeId !== employee.id) {
+      throw new ForbiddenException('Employees can only access their own profile');
+    }
+    if (user?.role === 'SUPERVISOR' && employee.supervisorId !== user.employeeId && employee.id !== user.employeeId) {
+      throw new ForbiddenException('Supervisors can only access their assigned employees');
+    }
   }
 }

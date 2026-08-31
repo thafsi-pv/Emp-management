@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { ForbiddenException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateSectionDto, UpdateSectionDto } from './dto/section.dto';
 
@@ -22,6 +22,21 @@ export class SectionsService {
     });
     if (!section) throw new NotFoundException('Section not found');
     return section;
+  }
+
+  async findEmployees(id: string, user: any) {
+    const section = await this.findOne(id);
+    if (user?.role === 'SUPERVISOR') {
+      const supervisor = await this.prisma.employee.findUnique({ where: { id: user.employeeId } });
+      if (!supervisor || supervisor.sectionId !== section.id) {
+        throw new ForbiddenException('Supervisors can only access their own section roster');
+      }
+    }
+    return this.prisma.employee.findMany({
+      where: { sectionId: id },
+      include: { designation: { select: { name: true } }, supervisor: { select: { name: true } } },
+      orderBy: { name: 'asc' },
+    });
   }
 
   async create(dto: CreateSectionDto) {

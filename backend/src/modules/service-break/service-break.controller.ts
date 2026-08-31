@@ -10,15 +10,31 @@ import { Roles } from '../../auth/decorators/roles.decorator';
 export class ServiceBreakController {
   constructor(private service: ServiceBreakService) {}
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'MANAGEMENT')
+  @Get('due') dueList() { return this.service.dueList(); }
+
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'MANAGEMENT')
+  @Get('active') activeList() { return this.service.activeList(); }
+
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER', 'MANAGEMENT')
   @Get() findAll(@Query() query: QueryServiceBreakDto) { return this.service.findAll(query); }
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER', 'MANAGEMENT')
   @Get(':id') findOne(@Param('id') id: string) { return this.service.findOne(id); }
 
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
   @Post() create(@Body() dto: CreateServiceBreakDto) { return this.service.create(dto); }
 
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
+  @Post('appointment/:appointmentId/start')
+  start(@Param('appointmentId') appointmentId: string, @Body() dto: CreateServiceBreakDto) { return this.service.startForAppointment(appointmentId, dto); }
+
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
+  @Patch(':id/complete')
+  complete(@Param('id') id: string) { return this.service.complete(id); }
+
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
   @Patch(':id') update(@Param('id') id: string, @Body() dto: UpdateServiceBreakDto) { return this.service.update(id, dto); }
 
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
   @Delete(':id') remove(@Param('id') id: string) { return this.service.remove(id); }
 }

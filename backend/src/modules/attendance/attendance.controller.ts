@@ -16,19 +16,29 @@ import { CurrentUser } from '../../auth/decorators/current-user.decorator';
 export class AttendanceController {
   constructor(private service: AttendanceService) {}
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER', 'EMPLOYEE')
   @Get()
-  findAll(@Query() query: QueryAttendanceDto) { return this.service.findAll(query); }
+  findAll(@Query() query: QueryAttendanceDto, @CurrentUser() user: any) { return this.service.findAll(query, user); }
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER')
   @Get('daily-summary')
   getDailySummary(@Query('date') date: string) {
     return this.service.getDailySummary(date || new Date().toISOString().slice(0, 10));
   }
 
+  @Roles('ADMIN', 'SUPERVISOR', 'DEPARTMENT_OFFICER')
   @Post()
-  create(@Body() dto: CreateAttendanceDto) { return this.service.create(dto); }
+  create(@Body() dto: CreateAttendanceDto, @CurrentUser() user: any) { return this.service.create(dto, user); }
 
+  @Roles('ADMIN', 'SUPERVISOR', 'DEPARTMENT_OFFICER')
   @Post('bulk')
-  bulkCreate(@Body() dto: BulkAttendanceDto) { return this.service.bulkCreate(dto); }
+  bulkCreate(@Body() dto: BulkAttendanceDto, @CurrentUser() user: any) { return this.service.bulkCreate(dto, user); }
+
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
+  @Post('override')
+  override(@Body() dto: CreateAttendanceDto, @CurrentUser() user: any) {
+    return this.service.create({ ...dto, override: true }, user);
+  }
 
   @Roles('ADMIN', 'SUPERVISOR')
   @Patch(':id/approve')

@@ -75,6 +75,8 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
   };
   const queryClient = useQueryClient();
   const [activeProfileTab, setActiveProfileTab] = useState('overview');
+  const [extensionStart, setExtensionStart] = useState(new Date().toISOString().slice(0, 10));
+  const [extensionDays, setExtensionDays] = useState('89');
   
   // Document uploading states
   const [docCategory, setDocCategory] = useState(DOCUMENT_CATEGORIES[0]);
@@ -88,6 +90,18 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
       const res = await apiClient.get(`/api/employees/${id}`);
       return res.data;
     },
+    enabled: !!id,
+  });
+
+  const { data: payStructure } = useQuery({
+    queryKey: ['employeePayStructure', id],
+    queryFn: async () => (await apiClient.get(`/api/employees/${id}/pay-structure`)).data,
+    enabled: !!id,
+  });
+
+  const { data: leaveBalance } = useQuery({
+    queryKey: ['leaveBalance', id],
+    queryFn: async () => (await apiClient.get(`/api/leaves/balance/${id}`)).data,
     enabled: !!id,
   });
 
@@ -127,6 +141,7 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
     const formData = new FormData();
     formData.append('employeeId', id);
     formData.append('name', docCategory);
+    formData.append('category', docCategory);
     formData.append('file', docFile);
 
     uploadMutation.mutate(formData);
@@ -154,6 +169,14 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
     queryKey: ['designations'],
     queryFn: async () => (await apiClient.get('/api/designations')).data,
   });
+  const { data: supervisors } = useQuery({
+    queryKey: ['supervisorOptions'],
+    queryFn: async () => {
+      try { return (await apiClient.get('/api/users/supervisors')).data; }
+      catch { return (await apiClient.get('/api/users')).data.filter((user: any) => user.role === 'SUPERVISOR' && user.employee); }
+    },
+  });
+  const supervisorOptions = Array.isArray(supervisors) ? supervisors : supervisors?.data || [];
 
   const updateMutation = useMutation({
     mutationFn: async (formData: FormData) => {
@@ -170,6 +193,10 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
     onError: (err: any) => {
       setEditError(err.response?.data?.message || 'Failed to update employee');
     },
+  });
+  const extensionMutation = useMutation({
+    mutationFn: async (previousAppointmentId: string) => apiClient.post('/api/extensions', { employeeId: id, previousAppointmentId, startDate: extensionStart, periodDays: Number(extensionDays), reason: 'Extension issued from employee profile' }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['employee', id] }),
   });
 
   
@@ -201,9 +228,13 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
     if (editData.gender) formData.append('gender', editData.gender);
     if (editData.dateOfBirth) formData.append('dateOfBirth', editData.dateOfBirth);
     if (editData.joiningDate) formData.append('joiningDate', editData.joiningDate);
-    if (editData.salary) formData.append('salary', editData.salary);
+    if (editData.bankName) formData.append('bankName', editData.bankName);
+    if (editData.accountNumber) formData.append('accountNumber', editData.accountNumber);
+    if (editData.ifscCode) formData.append('ifscCode', editData.ifscCode.toUpperCase());
+    if (editData.panNumber) formData.append('panNumber', editData.panNumber.toUpperCase());
     if (editData.departmentId) formData.append('departmentId', editData.departmentId);
     if (editData.designationId) formData.append('designationId', editData.designationId);
+    if (editData.supervisorId) formData.append('supervisorId', editData.supervisorId);
     if (editPhoto) formData.append('photo', editPhoto);
 
     updateMutation.mutate(formData);
@@ -219,9 +250,13 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
         gender: employee.gender,
         dateOfBirth: employee.dateOfBirth?.split('T')[0],
         joiningDate: employee.joiningDate?.split('T')[0],
-        salary: employee.salary,
+        bankName: employee.bankName || '',
+        accountNumber: employee.accountNumber || '',
+        ifscCode: employee.ifscCode || '',
+        panNumber: employee.panNumber || '',
         departmentId: employee.departmentId,
         designationId: employee.designationId,
+        supervisorId: employee.supervisorId || '',
       });
       setEditPhoto(null);
       setIsEditModalOpen(true);
@@ -435,11 +470,11 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
         <TabsContent value="appointments">
           <Card>
             <CardContent className="pt-6">
-              <h4 className="text-sm font-bold mb-4">Appointment Contracts & Extensions</h4>
+              <div className="flex justify-between items-center mb-4"><h4 className="text-sm font-bold">Appointment Contracts & Extensions</h4><div className="flex gap-2"><input className="form-input w-32" type="date" value={extensionStart} onChange={(e) => setExtensionStart(e.target.value)} /><input className="form-input w-20" type="number" value={extensionDays} onChange={(e) => setExtensionDays(e.target.value)} title="Extension days" /></div></div>
               <div className="table-container">
                 <table className="data-table">
                   <thead>
-                    <tr><th>Order No</th><th>Type</th><th>Start Date</th><th>End Date</th><th>Salary</th><th>Status</th></tr>
+                    <tr><th>Order No</th><th>Type</th><th>Start Date</th><th>End Date</th><th>Salary</th><th>Status</th><th>Action</th></tr>
                   </thead>
                   <tbody>
                     {(employee.appointments || []).map((apt: any) => (
@@ -450,6 +485,7 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
                         <td>{apt.endDate?.split('T')[0]}</td>
                         <td>₹ {apt.salary?.toLocaleString()}</td>
                         <td><Badge variant={getStatusBadgeVariant(apt.status)}>{apt.status}</Badge></td>
+                        <td>{apt.status !== 'TERMINATED' && <Button size="sm" variant="outline" disabled={extensionMutation.isPending} onClick={() => extensionMutation.mutate(apt.id)}>Extend</Button>}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -465,17 +501,32 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
             <CardContent className="pt-6">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {[
-                  { label: 'Pay Model', val: employee.designation?.payType || 'MONTHLY' },
-                  { label: 'Basic Pay Rate', val: `₹ ${employee.salary}` },
-                  { label: 'Weightage', val: `₹ ${employee.designation?.weightage || 0}` },
-                  { label: 'Standard Allowance', val: `₹ ${employee.designation?.allowance || 0}` },
-                  { label: 'OT Rate', val: `₹ ${employee.designation?.otRate || 0} / hr` },
+                  { label: 'Pay Model', val: payStructure?.current?.payType || employee.designation?.payType || 'MONTHLY' },
+                  { label: 'Basic Pay Rate', val: `₹ ${payStructure?.current?.basicPay ?? employee.salary}` },
+                  { label: 'Weightage', val: `₹ ${payStructure?.current?.weightage ?? 0}` },
+                  { label: 'Standard Allowance', val: `₹ ${payStructure?.current?.allowance ?? 0}` },
+                  { label: 'OT Rate', val: `₹ ${payStructure?.current?.otRate ?? 0} / hr` },
                 ].map((item, idx) => (
                   <div key={idx} className="flex justify-between items-center p-3 border rounded-lg bg-card text-xs">
                     <span className="text-muted-foreground">{item.label}</span>
                     <span className="font-semibold">{item.val}</span>
                   </div>
                 ))}
+              </div>
+              <h4 className="text-sm font-bold mt-6 mb-3">Pay History</h4>
+              <div className="table-container">
+                <table className="data-table">
+                  <thead><tr><th>Effective From</th><th>Basic Pay</th><th>Weightage</th><th>Allowance</th></tr></thead>
+                  <tbody>
+                    {(payStructure?.payHistory || []).map((version: any) => (
+                      <tr key={version.id}>
+                        <td>{version.effectiveFrom?.split('T')[0]}</td>
+                        <td>₹ {version.basicPay}</td><td>₹ {version.weightage}</td><td>₹ {version.allowance}</td>
+                      </tr>
+                    ))}
+                    {(payStructure?.payHistory || []).length === 0 && <tr><td colSpan={4} className="text-muted-foreground">No historical pay versions recorded.</td></tr>}
+                  </tbody>
+                </table>
               </div>
             </CardContent>
           </Card>
@@ -512,7 +563,12 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
           <Card>
             <CardContent className="pt-6">
               <h4 className="text-sm font-bold mb-2">Approved Leave Applications</h4>
-              <p className="text-xs text-muted-foreground">No active leave deductions recorded for current month.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+                <div className="p-3 border rounded-lg text-xs"><span className="text-muted-foreground">Paid Off</span><div className="font-bold text-base mt-1">{leaveBalance?.paidOff ?? 0} days</div></div>
+                <div className="p-3 border rounded-lg text-xs"><span className="text-muted-foreground">Festival</span><div className="font-bold text-base mt-1">{leaveBalance?.festival ?? 0} days</div></div>
+                <div className="p-3 border rounded-lg text-xs"><span className="text-muted-foreground">Other</span><div className="font-bold text-base mt-1">{leaveBalance?.other ?? 0} days</div></div>
+              </div>
+              <p className="text-xs text-muted-foreground">Balance values are maintained by establishment administration.</p>
             </CardContent>
           </Card>
         </TabsContent>
@@ -711,13 +767,21 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
                 options={designations?.map((d: any) => ({ label: d.name, value: d.id })) || []}
               />
 
-              <FormInput
-                label="Basic Salary (₹) *"
-                type="number"
-                value={editData.salary || ''}
-                onChange={(e) => setEditData({...editData, salary: e.target.value})}
-                required
+              <FormSelect
+                label="Reporting Supervisor"
+                value={editData.supervisorId || ''}
+                onValueChange={(val) => setEditData({...editData, supervisorId: val})}
+                options={supervisorOptions.map((item: any) => item.employee || item).filter((candidate: any) => candidate.id !== employee.id).map((candidate: any) => ({ label: `${candidate.name} (${candidate.code})`, value: candidate.id }))}
+                placeholder="Select Supervisor (optional)"
               />
+
+              <div className="sm:col-span-2 rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">Basic pay, allowance, weightage and OT rate are managed from the selected designation. Change them in Administration → Designations.</div>
+
+              <div className="sm:col-span-2 pt-2 border-t"><p className="text-sm font-semibold">Bank & Tax Details</p><p className="text-xs text-muted-foreground">You can add or update these later from this Edit Profile form.</p></div>
+              <FormInput label="Bank Name" value={editData.bankName || ''} onChange={(e) => setEditData({...editData, bankName: e.target.value})} />
+              <FormInput label="Account Number" value={editData.accountNumber || ''} onChange={(e) => setEditData({...editData, accountNumber: e.target.value})} />
+              <FormInput label="IFSC Code" value={editData.ifscCode || ''} onChange={(e) => setEditData({...editData, ifscCode: e.target.value.toUpperCase()})} />
+              <FormInput label="PAN Number" value={editData.panNumber || ''} onChange={(e) => setEditData({...editData, panNumber: e.target.value.toUpperCase()})} />
 
               <FormDatePicker
                 label="Joining Date"

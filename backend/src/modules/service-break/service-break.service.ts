@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { CreateServiceBreakDto, UpdateServiceBreakDto, QueryServiceBreakDto } from './dto/service-break.dto';
 import { paginate } from '../../common/dto/pagination.dto';
@@ -38,6 +38,29 @@ export class ServiceBreakService {
     return sb;
   }
 
+  async dueList() {
+    const today = new Date();
+    return this.prisma.appointment.findMany({
+      where: {
+        status: 'ACTIVE',
+        serviceBreakApplicable: true,
+        breakDueDate: { lte: new Date(today.getTime() + 30 * 86_400_000) },
+      },
+      include: {
+        employee: { select: { id: true, name: true, code: true, status: true } },
+        department: { select: { name: true } },
+        section: { select: { name: true } },
+      },
+      orderBy: { breakDueDate: 'asc' },
+    });
+  }
+
+  async activeList() {
+    return this.prisma.serviceBreak.findMany({
+      where: { status: 'ACTIVE' }, include: INCLUDE, orderBy: { breakEndDate: 'asc' },
+    });
+  }
+
   async create(dto: CreateServiceBreakDto) {
     return this.prisma.serviceBreak.create({
       data: {
@@ -46,6 +69,31 @@ export class ServiceBreakService {
         breakEndDate: new Date(dto.breakEndDate),
       },
       include: INCLUDE,
+    });
+  }
+
+  async startForAppointment(appointmentId: string, dto: CreateServiceBreakDto) {
+    const appointment = await this.prisma.appointment.findUnique({ where: { id: appointmentId } });
+    if (!appointment) throw new NotFoundException('Appointment not found');
+    if (appointment.employeeId !== dto.employeeId) throw new BadRequestException('Employee does not match appointment');
+    return this.prisma.$transaction(async (tx) => {
+      const record = await tx.serviceBreak.upsert({
+        where: { appointmentId },
+        update: { breakStartDate: new Date(dto.breakStartDate), breakEndDate: new Date(dto.breakEndDate), reason: dto.reason, remarks: dto.remarks, applicable: true, day178Date: appointment.breakDueDate, breakDueDate: appointment.breakDueDate, status: 'ACTIVE' },
+        create: { employeeId: dto.employeeId, appointmentId, breakStartDate: new Date(dto.breakStartDate), breakEndDate: new Date(dto.breakEndDate), reason: dto.reason, remarks: dto.remarks, applicable: true, day178Date: appointment.breakDueDate, breakDueDate: appointment.breakDueDate, status: 'ACTIVE' },
+        include: INCLUDE,
+      });
+      await tx.employee.update({ where: { id: dto.employeeId }, data: { status: 'SERVICE_BREAK' } });
+      return record;
+    });
+  }
+
+  async complete(id: string) {
+    const record = await this.findOne(id);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.serviceBreak.update({ where: { id }, data: { status: 'COMPLETED' }, include: INCLUDE });
+      await tx.employee.update({ where: { id: record.employeeId }, data: { status: 'ACTIVE' } });
+      return updated;
     });
   }
 

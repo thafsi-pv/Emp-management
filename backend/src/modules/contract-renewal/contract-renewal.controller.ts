@@ -12,6 +12,6 @@ export class ContractRenewalController {
 
   @Get() findAll(@Query() query: QueryContractRenewalDto) { return this.service.findAll(query); }
 
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
   @Post() create(@Body() dto: CreateContractRenewalDto) { return this.service.create(dto); }
 }

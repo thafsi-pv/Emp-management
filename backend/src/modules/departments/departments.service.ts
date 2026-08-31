@@ -26,6 +26,18 @@ export class DepartmentsService {
 
   async update(id: string, dto: UpdateDepartmentDto) {
     await this.findOne(id);
+    if (dto.name || dto.code) {
+      const duplicate = await this.prisma.department.findFirst({
+        where: {
+          id: { not: id },
+          OR: [
+            ...(dto.name ? [{ name: dto.name }] : []),
+            ...(dto.code ? [{ code: dto.code }] : []),
+          ],
+        },
+      });
+      if (duplicate) throw new ConflictException('Department name or code already exists');
+    }
     return this.prisma.department.update({ where: { id }, data: dto });
   }
 

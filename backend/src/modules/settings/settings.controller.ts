@@ -1,4 +1,4 @@
-import { Controller, Get, Patch, Body, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Patch, Put, Body, Param, UseGuards } from '@nestjs/common';
 import { SettingsService } from './settings.service';
 import { UpdateSettingDto } from './dto/setting.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
@@ -19,5 +19,11 @@ export class SettingsController {
   @Patch(':key')
   update(@Param('key') key: string, @Body() dto: UpdateSettingDto) {
     return this.service.update(key, dto.value);
+  }
+
+  @Roles('ADMIN')
+  @Put()
+  updateMany(@Body() body: { settings?: Array<{ key: string; value: string }> }) {
+    return this.service.updateMany(body.settings ?? []);
   }
 }

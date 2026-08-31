@@ -1,12 +1,10 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
-import { APP_GUARD } from '@nestjs/core';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { join } from 'path';
 
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
-import { RolesGuard } from './auth/guards/roles.guard';
 import { StorageModule } from './common/services/storage.module';
 
 import { UsersModule } from './modules/users/users.module';
@@ -26,6 +24,9 @@ import { FinalSettlementModule } from './modules/final-settlement/final-settleme
 import { ReportsModule } from './modules/reports/reports.module';
 import { SettingsModule } from './modules/settings/settings.module';
 import { DocumentsModule } from './modules/documents/documents.module';
+import { AlertsModule } from './modules/alerts/alerts.module';
+import { DashboardModule } from './modules/dashboard/dashboard.module';
+import { ExtensionsModule } from './modules/extensions/extensions.module';
 
 @Module({
   imports: [
@@ -54,9 +55,10 @@ import { DocumentsModule } from './modules/documents/documents.module';
     ReportsModule,
     SettingsModule,
     DocumentsModule,
+    AlertsModule,
+    DashboardModule,
+    ExtensionsModule,
   ],
-  providers: [
-    { provide: APP_GUARD, useClass: RolesGuard },
-  ],
+  providers: [],
 })
 export class AppModule {}

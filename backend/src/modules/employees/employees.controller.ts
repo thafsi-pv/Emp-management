@@ -19,24 +19,34 @@ export class EmployeesController {
     private storageService: StorageService,
   ) {}
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER', 'MANAGEMENT')
   @Get()
   findAll(@Query() query: QueryEmployeeDto, @CurrentUser() user: any) {
     return this.service.findAll(query, user);
   }
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER', 'MANAGEMENT')
   @Get('stats')
   getStats() {
     return this.service.getStats();
   }
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER', 'MANAGEMENT', 'EMPLOYEE')
   @Get(':id')
-  findOne(@Param('id') id: string) {
-    return this.service.findOne(id);
+  findOne(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.service.findOneForUser(id, user);
   }
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER', 'MANAGEMENT', 'EMPLOYEE')
   @Get(':id/service-history')
-  getServiceHistory(@Param('id') id: string) {
-    return this.service.getServiceHistory(id);
+  getServiceHistory(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.service.getServiceHistoryForUser(id, user);
+  }
+
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER', 'MANAGEMENT', 'EMPLOYEE')
+  @Get(':id/pay-structure')
+  getPayStructure(@Param('id') id: string, @CurrentUser() user: any) {
+    return this.service.getPayStructureForUser(id, user);
   }
 
   @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR')

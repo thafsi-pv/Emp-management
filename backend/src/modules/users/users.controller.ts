@@ -16,6 +16,12 @@ export class UsersController {
     return this.service.findAll();
   }
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR')
+  @Get('supervisors')
+  findSupervisors() {
+    return this.service.findSupervisors();
+  }
+
   @Roles('ADMIN')
   @Get(':id')
   findOne(@Param('id') id: string) {

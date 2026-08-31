@@ -1,5 +1,5 @@
 import {
-  Injectable, NotFoundException, ConflictException, BadRequestException,
+  Injectable, NotFoundException, ConflictException, BadRequestException, ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
 import { GeneratePayrollDto, QueryPayrollDto } from './dto/payroll.dto';
@@ -46,6 +46,14 @@ export class PayrollService {
     return payroll;
   }
 
+  async findOneForUser(id: string, user: any) {
+    const payroll = await this.findOne(id);
+    if (user?.role === 'EMPLOYEE' && payroll.employeeId !== user.employeeId) {
+      throw new ForbiddenException('Employees can only access their own payroll records');
+    }
+    return payroll;
+  }
+
   async generate(dto: GeneratePayrollDto) {
     const { employeeId, month, year } = dto;
 
@@ -66,6 +74,7 @@ export class PayrollService {
       where: {
         employeeId,
         approvalStatus: 'APPROVED',
+        establishmentVerified: true,
         date: {
           gte: new Date(year, parseInt(month) - 1, 1),
           lte: new Date(year, parseInt(month), 0),
@@ -165,6 +174,53 @@ export class PayrollService {
       approved: records.filter((r) => r.status === 'APPROVED' || r.status === 'PAID').length,
       pending: records.filter((r) => r.status === 'DRAFT').length,
     };
+  }
+
+  async findRuns() {
+    return this.prisma.payrollRun.findMany({
+      include: { _count: { select: { entries: true } } },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+    });
+  }
+
+  async createRun(month: number, year: number) {
+    return this.prisma.payrollRun.upsert({
+      where: { month_year: { month, year } },
+      update: {}, create: { month, year },
+      include: { entries: true },
+    });
+  }
+
+  async generateRun(id: string) {
+    const run = await this.prisma.payrollRun.findUnique({ where: { id } });
+    if (!run) throw new NotFoundException('Payroll run not found');
+    if (run.status !== 'DRAFT') throw new BadRequestException('Only draft payroll runs can be generated');
+    const employees = await this.prisma.employee.findMany({ where: { status: 'ACTIVE' }, include: { designation: true } });
+    const start = new Date(run.year, run.month - 1, 1);
+    const end = new Date(run.year, run.month, 0);
+    await this.prisma.$transaction(async (tx) => {
+      for (const employee of employees) {
+      const attendance = await tx.attendance.findMany({ where: { employeeId: employee.id, establishmentVerified: true, date: { gte: start, lte: end } } });
+      const presentDays = attendance.reduce((total, row) => total + (row.status === 'HALF_DAY' ? .5 : ['PRESENT', 'OD', 'HOLIDAY', 'LEAVE'].includes(row.status) ? 1 : 0), 0);
+      const absentDays = attendance.filter((row) => row.status === 'ABSENT').length;
+      const overtime = attendance.reduce((total, row) => total + (row.otHours || 0), 0) * employee.designation.otRate;
+      const basicPay = employee.salary || employee.designation.basicPay;
+      const isDaily = employee.designation.payType === 'DAILY';
+      const netPay = (isDaily ? basicPay * presentDays : basicPay) + employee.designation.weightage + employee.designation.allowance + overtime;
+      await tx.payrollEntry.upsert({
+        where: { payrollRunId_employeeId: { payrollRunId: run.id, employeeId: employee.id } },
+        update: { basicPay, weightage: employee.designation.weightage, allowance: employee.designation.allowance, overtime, presentDays, absentDays, netPay },
+        create: { payrollRunId: run.id, employeeId: employee.id, basicPay, weightage: employee.designation.weightage, allowance: employee.designation.allowance, overtime, presentDays, absentDays, netPay },
+      });
+      }
+    });
+    return this.prisma.payrollRun.findUnique({ where: { id }, include: { entries: { include: { employee: { select: { name: true, code: true } } } } } });
+  }
+
+  async findRun(id: string) {
+    const run = await this.prisma.payrollRun.findUnique({ where: { id }, include: { entries: { include: { employee: { select: { name: true, code: true, bankName: true, accountNumber: true, ifscCode: true } } } } } });
+    if (!run) throw new NotFoundException('Payroll run not found');
+    return run;
   }
 
   private getWorkingDaysInMonth(month: number, year: number): number {

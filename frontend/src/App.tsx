@@ -18,6 +18,9 @@ import { Reports } from './views/Reports';
 import { Settings } from './views/Settings';
 import { OrgMaster } from './views/OrgMaster';
 import { UserManagement } from './views/UserManagement';
+import { AlertCenter } from './views/AlertCenter';
+import { ServiceBreaks } from './views/ServiceBreaks';
+import { MasterData } from './views/MasterData';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -96,6 +99,11 @@ export const AppContent: React.FC = () => {
           path="/my-profile"
           element={<EmployeeProfile employeeId={user?.employeeId ?? null} />}
         />
+        <Route path="/alerts" element={<AlertCenter />} />
+        <Route path="/service-breaks" element={<ProtectedRoute element={<ServiceBreaks />} allowedRoles={['ADMIN', 'ESTABLISHMENT_OFFICER', 'MANAGEMENT']} />} />
+        <Route path="/masters/departments" element={<ProtectedRoute element={<MasterData kind="departments" />} allowedRoles={['ADMIN']} />} />
+        <Route path="/masters/sections" element={<ProtectedRoute element={<MasterData kind="sections" />} allowedRoles={['ADMIN']} />} />
+        <Route path="/masters/designations" element={<ProtectedRoute element={<MasterData kind="designations" />} allowedRoles={['ADMIN']} />} />
 
         <Route
           path="/attendance"
@@ -169,6 +177,7 @@ export const AppContent: React.FC = () => {
             />
           }
         />
+        <Route path="/reports/:type" element={<ProtectedRoute element={<Reports />} allowedRoles={['ADMIN', 'ESTABLISHMENT_OFFICER', 'PAYROLL_OFFICER', 'DEPARTMENT_OFFICER', 'MANAGEMENT']} />} />
         <Route
           path="/settings"
           element={

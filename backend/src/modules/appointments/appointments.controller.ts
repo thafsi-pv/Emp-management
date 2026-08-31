@@ -17,28 +17,32 @@ export class AppointmentsController {
     private pdfService: AppointmentPdfService,
   ) {}
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER', 'MANAGEMENT')
   @Get()
   findAll(@Query() query: QueryAppointmentDto) { return this.service.findAll(query); }
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'MANAGEMENT')
   @Get('expiring')
   getExpiring(@Query('days') days: string) {
     return this.service.getExpiring(parseInt(days) || 30);
   }
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER', 'MANAGEMENT')
   @Get(':id')
   findOne(@Param('id') id: string) { return this.service.findOne(id); }
 
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER', 'SUPERVISOR', 'DEPARTMENT_OFFICER', 'MANAGEMENT')
   @Get(':id/pdf')
   async downloadPdf(@Param('id') id: string, @Res() res: Response) {
     const appt = await this.service.findOne(id);
     this.pdfService.generateAppointmentPdf(appt, res);
   }
 
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
   @Post()
   create(@Body() dto: CreateAppointmentDto) { return this.service.create(dto); }
 
-  @Roles('ADMIN')
+  @Roles('ADMIN', 'ESTABLISHMENT_OFFICER')
   @Patch(':id')
   update(@Param('id') id: string, @Body() dto: UpdateAppointmentDto) {
     return this.service.update(id, dto);

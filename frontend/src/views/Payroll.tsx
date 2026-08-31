@@ -47,6 +47,20 @@ export const Payroll: React.FC = () => {
   const [genOvertime, setGenOvertime] = useState('0');
   const [isGenerateOpen, setIsGenerateOpen] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
+  const downloadRunPdf = async (runId: string, kind: 'register' | 'bank-statement') => { const response = await apiClient.get(`/api/payroll/runs/${runId}/${kind}.pdf`, { responseType: 'blob' }); const url = URL.createObjectURL(new Blob([response.data], { type: 'application/pdf' })); const link = document.createElement('a'); link.href = url; link.download = `${kind}.pdf`; link.click(); URL.revokeObjectURL(url); };
+
+  const { data: payrollRuns } = useQuery({
+    queryKey: ['payrollRuns'],
+    queryFn: async () => (await apiClient.get('/api/payroll/runs')).data,
+  });
+  const createRunMutation = useMutation({
+    mutationFn: async () => (await apiClient.post('/api/payroll/runs', { month: Number(month), year: Number(year) })).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payrollRuns'] }),
+  });
+  const generateRunMutation = useMutation({
+    mutationFn: async (id: string) => (await apiClient.post(`/api/payroll/runs/${id}/generate`)).data,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['payrollRuns'] }),
+  });
 
   // Fetch payroll list for selected month/year
   const { data: payrollRes, isLoading } = useQuery({
@@ -197,6 +211,19 @@ export const Payroll: React.FC = () => {
           Generate Payroll
           {isGenerateOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
         </button>
+      </div>
+
+      <div className="card" style={{ padding: '16px 24px' }}>
+        <div className="flex-between">
+          <div><h4 style={{ margin: 0 }}>Payroll Runs</h4><p style={{ margin: '4px 0 0', fontSize: 12, color: 'var(--text-secondary)' }}>Create one run per month and generate all verified employee entries.</p></div>
+          <button className="btn btn-secondary" onClick={() => createRunMutation.mutate()} disabled={createRunMutation.isPending}>Create {month}/{year} Run</button>
+        </div>
+        {(payrollRuns || []).map((run: any) => (
+          <div key={run.id} style={{ display: 'flex', gap: 12, alignItems: 'center', marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border-color)' }}>
+            <strong style={{ flex: 1 }}>{String(run.month).padStart(2, '0')}/{run.year}</strong><span className="badge badge-info">{run._count?.entries || 0} entries</span><span className="badge badge-warning">{run.status}</span>
+            <button className="btn btn-primary" onClick={() => generateRunMutation.mutate(run.id)} disabled={run.status !== 'DRAFT' || generateRunMutation.isPending}>Generate entries</button><button className="btn btn-secondary" onClick={() => downloadRunPdf(run.id, 'register')} disabled={!run._count?.entries}>Register PDF</button><button className="btn btn-secondary" onClick={() => downloadRunPdf(run.id, 'bank-statement')} disabled={!run._count?.entries}>Bank PDF</button>
+          </div>
+        ))}
       </div>
 
       {/* Collapsible Generate Form */}

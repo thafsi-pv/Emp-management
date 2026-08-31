@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../api/client';
-import { UserMinus, CheckCircle2, Clock } from 'lucide-react';
+import { UserMinus } from 'lucide-react';
 
 interface OffboardingRecord {
   id: string;
@@ -36,8 +36,9 @@ export const Offboarding: React.FC = () => {
   const { data: offboardingsRes, isLoading } = useQuery({
     queryKey: ['offboardings'],
     queryFn: async () => {
-      const res = await apiClient.get('/api/offboardings');
-      return res.data;
+      const res = await apiClient.get('/api/contract-terminations?limit=100');
+      const rows = res.data?.data || [];
+      return { data: rows.map((row: any) => ({ ...row, type: row.employee?.status === 'RESIGNED' ? 'RESIGNATION' : 'TERMINATION', noticeDate: row.createdAt?.slice(0, 10), lastWorkingDay: row.terminationDate?.slice(0, 10), status: row.employee?.separation?.clearanceDone ? 'COMPLETED' : 'PENDING', departmentClearance: row.employee?.separation?.clearanceDone, financeClearance: row.employee?.separation?.idCardReturned, hrClearance: row.employee?.separation?.propertyReturned })) };
     },
   });
 
@@ -53,7 +54,8 @@ export const Offboarding: React.FC = () => {
   // Submit offboarding request mutation
   const submitMutation = useMutation({
     mutationFn: async (data: any) => {
-      const res = await apiClient.post('/api/offboardings', data);
+      const endpoint = data.type === 'RESIGNATION' ? '/api/contract-terminations/resignation' : '/api/contract-terminations';
+      const res = await apiClient.post(endpoint, { employeeId: data.employeeId, terminationDate: data.lastWorkingDay, reason: data.reason });
       return res.data;
     },
     onSuccess: () => {
@@ -65,28 +67,8 @@ export const Offboarding: React.FC = () => {
       setErrorMsg(err.response?.data?.message || 'Failed to submit offboarding request');
     },
   });
+  const clearanceMutation = useMutation({ mutationFn: async ({ employeeId, field, value }: { employeeId: string; field: string; value: boolean }) => apiClient.patch(`/api/contract-terminations/${employeeId}/clearance`, { [field]: value }), onSuccess: () => queryClient.invalidateQueries({ queryKey: ['offboardings'] }) });
 
-  // Toggle clearance status mutation
-  const clearanceMutation = useMutation({
-    mutationFn: async ({ id, dept, status }: { id: string; dept: 'dept' | 'finance' | 'hr'; status: boolean }) => {
-      const endpoint = `/api/offboardings/${id}/clearance/${dept}`;
-      await apiClient.patch(endpoint, { status });
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['offboardings'] });
-    },
-  });
-
-  // Complete offboarding mutation
-  const completeMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiClient.patch(`/api/offboardings/${id}/complete`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['offboardings'] });
-      queryClient.invalidateQueries({ queryKey: ['employees'] });
-    },
-  });
 
   const resetForm = () => {
     setEmployeeId('');
@@ -149,7 +131,6 @@ export const Offboarding: React.FC = () => {
               </thead>
               <tbody>
                 {records.map((rec) => {
-                  const allCleared = rec.departmentClearance && rec.financeClearance && rec.hrClearance;
                   return (
                     <tr key={rec.id}>
                       <td>
@@ -162,34 +143,13 @@ export const Offboarding: React.FC = () => {
                       <td>{rec.noticeDate}</td>
                       <td>{rec.lastWorkingDay}</td>
                       <td>
-                        <button
-                          className={`btn ${rec.departmentClearance ? 'btn-success' : 'btn-secondary'}`}
-                          style={{ padding: '4px 8px', fontSize: '11px' }}
-                          onClick={() => clearanceMutation.mutate({ id: rec.id, dept: 'dept', status: !rec.departmentClearance })}
-                        >
-                          {rec.departmentClearance ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                          {rec.departmentClearance ? 'Cleared' : 'Pending'}
-                        </button>
+                        <button className={`btn ${rec.departmentClearance ? 'btn-success' : 'btn-secondary'}`} onClick={() => clearanceMutation.mutate({ employeeId: rec.employee.id, field: 'clearanceDone', value: !rec.departmentClearance })}>{rec.departmentClearance ? 'Cleared' : 'Pending'}</button>
                       </td>
                       <td>
-                        <button
-                          className={`btn ${rec.financeClearance ? 'btn-success' : 'btn-secondary'}`}
-                          style={{ padding: '4px 8px', fontSize: '11px' }}
-                          onClick={() => clearanceMutation.mutate({ id: rec.id, dept: 'finance', status: !rec.financeClearance })}
-                        >
-                          {rec.financeClearance ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                          {rec.financeClearance ? 'Cleared' : 'Pending'}
-                        </button>
+                        <button className={`btn ${rec.financeClearance ? 'btn-success' : 'btn-secondary'}`} onClick={() => clearanceMutation.mutate({ employeeId: rec.employee.id, field: 'idCardReturned', value: !rec.financeClearance })}>{rec.financeClearance ? 'Cleared' : 'Pending'}</button>
                       </td>
                       <td>
-                        <button
-                          className={`btn ${rec.hrClearance ? 'btn-success' : 'btn-secondary'}`}
-                          style={{ padding: '4px 8px', fontSize: '11px' }}
-                          onClick={() => clearanceMutation.mutate({ id: rec.id, dept: 'hr', status: !rec.hrClearance })}
-                        >
-                          {rec.hrClearance ? <CheckCircle2 size={12} /> : <Clock size={12} />}
-                          {rec.hrClearance ? 'Cleared' : 'Pending'}
-                        </button>
+                        <button className={`btn ${rec.hrClearance ? 'btn-success' : 'btn-secondary'}`} onClick={() => clearanceMutation.mutate({ employeeId: rec.employee.id, field: 'propertyReturned', value: !rec.hrClearance })}>{rec.hrClearance ? 'Cleared' : 'Pending'}</button>
                       </td>
                       <td>
                         <span className={`badge badge-${rec.status === 'COMPLETED' ? 'success' : 'warning'}`}>
@@ -197,17 +157,7 @@ export const Offboarding: React.FC = () => {
                         </span>
                       </td>
                       <td>
-                        {rec.status !== 'COMPLETED' && (
-                          <button
-                            className="btn btn-primary"
-                            style={{ padding: '4px 10px', fontSize: '11px' }}
-                            disabled={!allCleared || completeMutation.isPending}
-                            onClick={() => completeMutation.mutate(rec.id)}
-                            title={!allCleared ? 'Requires clearance from all 3 departments' : 'Finalize Exit'}
-                          >
-                            Finalize Exit
-                          </button>
-                        )}
+                        <span style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Clearance saved on separation</span>
                       </td>
                     </tr>
                   );

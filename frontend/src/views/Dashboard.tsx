@@ -58,6 +58,22 @@ export const Dashboard: React.FC<{ onNavigateToEmployee?: (empId: string) => voi
     },
   });
 
+  const { data: dashboardSummary } = useQuery({
+    queryKey: ['dashboardSummary'],
+    queryFn: async () => (await apiClient.get('/api/dashboard/summary')).data,
+    refetchInterval: 30000,
+  });
+  const { data: dashboardStrength } = useQuery({
+    queryKey: ['dashboardStrength'],
+    queryFn: async () => (await apiClient.get('/api/dashboard/strength')).data,
+    refetchInterval: 30000,
+  });
+  const { data: serverAlerts } = useQuery({
+    queryKey: ['dashboardAlerts'],
+    queryFn: async () => (await apiClient.get('/api/alerts')).data,
+    refetchInterval: 30000,
+  });
+
   if (statsLoading || employeesLoading) {
     return (
       <div style={styles.loadingContainer}>
@@ -71,11 +87,11 @@ export const Dashboard: React.FC<{ onNavigateToEmployee?: (empId: string) => voi
   const appointments = appointmentsData?.data || [];
 
   // Calculate stats
-  const totalCount = employees.length;
-  const activeCount = employees.filter((e: any) => e.status === 'ACTIVE').length;
-  const terminatedCount = employees.filter((e: any) => e.status === 'TERMINATED').length;
-  const resignedCount = employees.filter((e: any) => e.status === 'RESIGNED').length;
-  const onLeaveCount = employees.filter((e: any) => e.status === 'INACTIVE').length; // Map INACTIVE to On Leave for display
+  const totalCount = dashboardSummary?.total ?? employees.length;
+  const activeCount = dashboardSummary?.active ?? employees.filter((e: any) => e.status === 'ACTIVE').length;
+  const terminatedCount = dashboardSummary?.terminated ?? employees.filter((e: any) => e.status === 'TERMINATED').length;
+  const resignedCount = dashboardSummary?.resigned ?? employees.filter((e: any) => e.status === 'RESIGNED').length;
+  const onLeaveCount = dashboardSummary?.leave ?? employees.filter((e: any) => e.status === 'LEAVE').length;
 
   // Department-wise distribution
   const deptMap: Record<string, number> = {};
@@ -85,7 +101,8 @@ export const Dashboard: React.FC<{ onNavigateToEmployee?: (empId: string) => voi
       deptMap[deptName] = (deptMap[deptName] || 0) + 1;
     }
   });
-  const deptChartData = Object.entries(deptMap).map(([label, value]) => ({ label, value }));
+  const deptChartData = dashboardStrength?.department?.map((item: any) => ({ label: item.name, value: item.count }))
+    ?? Object.entries(deptMap).map(([label, value]) => ({ label, value }));
 
   // Designation-wise distribution
   const desigMap: Record<string, number> = {};
@@ -152,6 +169,14 @@ export const Dashboard: React.FC<{ onNavigateToEmployee?: (empId: string) => voi
 
   // Sort alerts by severity & urgency
   alertLogs.sort((a, b) => a.daysLeft - b.daysLeft);
+  const displayAlerts = Array.isArray(serverAlerts) && serverAlerts.length > 0
+    ? serverAlerts.map((alert: any) => ({
+      type: String(alert.alertType).replaceAll('_', ' '),
+      message: `${alert.employee?.name ? `${alert.employee.name} · ` : ''}Due ${new Date(alert.dueDate).toLocaleDateString()}`,
+      severity: alert.daysBefore <= 7 ? 'danger' : alert.daysBefore <= 30 ? 'warning' : 'info',
+      daysLeft: alert.daysBefore,
+    }))
+    : alertLogs;
 
   // Stats Card Config
   const statsCards = [
@@ -236,12 +261,12 @@ export const Dashboard: React.FC<{ onNavigateToEmployee?: (empId: string) => voi
               <AlertTriangle size={18} color="var(--color-warning)" />
               Automatic System Alerts
             </h3>
-            <span className="badge badge-danger">{alertLogs.length} Pending</span>
+            <span className="badge badge-danger">{displayAlerts.length} Pending</span>
           </div>
 
           <div style={styles.alertsScrollContainer}>
-            {alertLogs.length > 0 ? (
-              alertLogs.map((alert, i) => (
+            {displayAlerts.length > 0 ? (
+              displayAlerts.map((alert, i) => (
                 <div key={i} className={`alert-card ${alert.severity}`}>
                   <div style={styles.alertContent}>
                     <div style={styles.alertHeader}>
