@@ -79,9 +79,9 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
   const [extensionDays, setExtensionDays] = useState('89');
   
   // Document uploading states
-  const [docCategory, setDocCategory] = useState(DOCUMENT_CATEGORIES[0]);
+  const [docCategory, setDocCategory] = useState<string>(DOCUMENT_CATEGORIES[0]);
   const [docFile, setDocFile] = useState<File | null>(null);
-  const [, setUploadError] = useState<string | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Fetch employee details
   const { data: employee, isLoading: empLoading, error: empError } = useQuery({
@@ -137,6 +137,12 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
     e.preventDefault();
     if (!docFile || !id) return;
     setUploadError(null);
+
+    // Validate file size (10MB limit)
+    if (docFile.size > 10 * 1024 * 1024) {
+      setUploadError('File size exceeds the 10MB limit. Please select a smaller file.');
+      return;
+    }
 
     const formData = new FormData();
     formData.append('employeeId', id);
@@ -594,7 +600,9 @@ export const EmployeeProfile: React.FC<{ employeeId?: string | null; onBack?: ()
                       className="cursor-pointer"
                       required
                     />
+                    <p className="text-[10px] text-muted-foreground mt-1">Maximum file size: 10MB</p>
                   </div>
+                  {uploadError && <p className="text-xs text-destructive font-medium">{uploadError}</p>}
                   <Button type="submit" disabled={uploadMutation.isPending || !docFile} className="w-full">
                     <Upload className="mr-2 h-4 w-4" /> Upload Document
                   </Button>
