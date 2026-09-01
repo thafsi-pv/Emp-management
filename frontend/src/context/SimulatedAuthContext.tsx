@@ -40,7 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const fetchMe = async () => {
       if (token) {
         try {
-          const res = await apiClient.get('/auth/me');
+          const res = await apiClient.get('/api/auth/me');
           setUser(res.data);
           // Set initial simulated role based on real database role
           setSimulatedRole(res.data.role);
@@ -58,11 +58,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (phone: string, password: string) => {
     setLoading(true);
     try {
-      const res = await apiClient.post('/auth/login', { phone, password });
+      const res = await apiClient.post('/api/auth/login', { phone, password });
       const { accessToken, user } = res.data;
 
       localStorage.setItem('auth_token', accessToken);
-      
+
       setToken(accessToken);
       setUser(user);
       setSimulatedRole(user.role);
@@ -76,7 +76,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     if (token) {
       try {
-        await apiClient.post('/auth/logout');
+        await apiClient.post('/api/auth/logout');
       } catch (e) {
         console.error('Logout request failed', e);
       }
