@@ -36,8 +36,8 @@ services:
         condition: service_healthy
     volumes:
       - backend_uploads:/app/uploads
-    expose:
-      - "3000"
+    ports:
+      - "3000:3000"
 
   frontend:
     build:
