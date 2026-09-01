@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import axios from 'axios';
+import apiClient from '../api/client';
 
 export type UserRole = 'ADMIN' | 'SUPERVISOR' | 'EMPLOYEE' | 'ESTABLISHMENT_OFFICER' | 'PAYROLL_OFFICER' | 'DEPARTMENT_OFFICER' | 'MANAGEMENT';
 
@@ -40,8 +40,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const fetchMe = async () => {
       if (token) {
         try {
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-          const res = await axios.get('/api/auth/me');
+          const res = await apiClient.get('/auth/me');
           setUser(res.data);
           // Set initial simulated role based on real database role
           setSimulatedRole(res.data.role);
@@ -59,11 +58,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (phone: string, password: string) => {
     setLoading(true);
     try {
-      const res = await axios.post('/api/auth/login', { phone, password });
+      const res = await apiClient.post('/auth/login', { phone, password });
       const { accessToken, user } = res.data;
-      
+
       localStorage.setItem('auth_token', accessToken);
-      axios.defaults.headers.common['Authorization'] = `Bearer ${accessToken}`;
       
       setToken(accessToken);
       setUser(user);
@@ -78,13 +76,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const logout = async () => {
     if (token) {
       try {
-        await axios.post('/api/auth/logout');
+        await apiClient.post('/auth/logout');
       } catch (e) {
         console.error('Logout request failed', e);
       }
     }
     localStorage.removeItem('auth_token');
-    delete axios.defaults.headers.common['Authorization'];
     setToken(null);
     setUser(null);
   };
